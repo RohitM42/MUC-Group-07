@@ -1,0 +1,1 @@
+to exit the python program press ctrl + c otherwise the csv file won't save
