@@ -1,15 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text } from 'react-native';
+import { useTheme } from '../context/ThemeContext';
 
 export default function LiveScreen() {
+  const { colours } = useTheme();
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>Live Tracking — coming soon</Text>
+    <View style={{ flex: 1, backgroundColor: colours.background, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ color: colours.textSub, fontSize: 16 }}>Live Tracking — coming soon</Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111', alignItems: 'center', justifyContent: 'center' },
-  text:      { color: '#fff', fontSize: 16 },
-});
