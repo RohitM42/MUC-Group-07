@@ -7,8 +7,6 @@ import React, {
   useCallback,
 } from 'react';
 import {
-  NativeEventEmitter,
-  NativeModules,
   PermissionsAndroid,
   Platform,
 } from 'react-native';
@@ -67,8 +65,6 @@ export function useBle(): BleContextValue {
 
 // Provider --------------------------------------------------------------------
 
-const BleManagerModule = NativeModules.BleManager;
-const bleEmitter = new NativeEventEmitter(BleManagerModule);
 
 export function BleProvider({ children }: { children: React.ReactNode }) {
   const [isScanning, setIsScanning]             = useState(false);
@@ -105,57 +101,50 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
 
     // BLE event listeners -------------------------------------------------------
 
-    const onDiscover = bleEmitter.addListener(
-      'BleManagerDiscoverPeripheral',
-      (peripheral) => {
-        setDevices(prev => {
-          if (prev.some(d => d.id === peripheral.id)) return prev;
-          return [...prev, {
-            id:   peripheral.id,
-            name: peripheral.name || 'Unknown Device',
-            rssi: peripheral.rssi,
-          }];
-        });
+    const onDiscover = BleManager.onDiscoverPeripheral((peripheral) => {
+      setDevices(prev => {
+        if (prev.some(d => d.id === peripheral.id)) return prev;
+        console.log('Discovered device:', peripheral.id, peripheral.name);
+        return [...prev, {
+          id:   peripheral.id,
+          name: peripheral.name || 'Unknown Device',
+          rssi: peripheral.rssi,
+        }];
+      });
+    });
+
+    const onDisconnect = BleManager.onDisconnectPeripheral((data) => {
+      if (data.peripheral === connectedDeviceId) {
+        setConnectedDeviceId(null);
+        setConnectionStatus('Disconnected');
+        setRawIMU(null);
+        setDerived(null);
       }
-    );
+    });
 
-    const onDisconnect = bleEmitter.addListener(
-      'BleManagerDisconnectPeripheral',
-      (data) => {
-        if (data.peripheral === connectedDeviceId) {
-          setConnectedDeviceId(null);
-          setConnectionStatus('Disconnected');
-          setRawIMU(null);
-          setDerived(null);
-        }
+    const onValueUpdate = BleManager.onDidUpdateValueForCharacteristic((data) => {
+      const now = Date.now();
+
+      // Parse regardless — needed for step detection
+      const timestamp = now - connectionStartTime.current;
+      const imu = unpackIMU(data.value, timestamp);
+      console.log('Received IMU data:', imu);
+      const metrics = deriveMetrics(imu);
+
+      // Step detection runs on every sample
+      const isStep = detectStep(metrics.totalAccel, timestamp);
+      if (isStep) {
+        setStepCount(prev => prev + 1);
+        setPace(updatePace(timestamp));
       }
-    );
 
-    const onValueUpdate = bleEmitter.addListener(
-      'BleManagerDidUpdateValueForCharacteristic',
-      (data) => {
-        const now = Date.now();
+      // Throttle UI renders to 10Hz
+      if (now - lastUIUpdate.current < 500) return;
+      lastUIUpdate.current = now;
 
-        // Parse regardless — needed for step detection
-        const timestamp = now - connectionStartTime.current;
-        const imu = unpackIMU(data.value, timestamp);
-        const metrics = deriveMetrics(imu);
-
-        // Step detection runs on every sample
-        const isStep = detectStep(metrics.totalAccel, timestamp);
-        if (isStep) {
-          setStepCount(prev => prev + 1);
-          setPace(updatePace(timestamp));
-        }
-
-        // Throttle UI renders to 10Hz
-        if (now - lastUIUpdate.current < 100) return;
-        lastUIUpdate.current = now;
-
-        setRawIMU(imu);
-        setDerived(metrics);
-      }
-    );
+      setRawIMU(imu);
+      setDerived(metrics);
+    });
 
     return () => {
       onDiscover.remove();
@@ -167,10 +156,28 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   // Actions -------------------------------------------------------------------
 
   const startScan = useCallback(async () => {
+    if (Platform.OS === 'android') {
+      const granted = await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      ]);
+
+      const allGranted = Object.values(granted).every(
+        v => v === PermissionsAndroid.RESULTS.GRANTED
+      );
+
+      if (!allGranted) {
+        console.warn('Bluetooth permissions denied');
+        setIsScanning(false);
+        return;
+      }
+    }
+
     setDevices([]);
     setIsScanning(true);
     try {
-      await BleManager.scan({});
+      await BleManager.scan({ seconds: 5, allowDuplicates: true });
       setTimeout(async () => {
         await BleManager.stopScan();
         const peripherals = await BleManager.getDiscoveredPeripherals();
@@ -194,6 +201,8 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     try {
       await BleManager.connect(deviceId);
       await BleManager.retrieveServices(deviceId);
+      const negotiatedMTU = await BleManager.requestMTU(deviceId, 64);
+      console.log('[BLE] Negotiated MTU:', negotiatedMTU);
 
       connectionStartTime.current = Date.now();
       resetStepDetector();
@@ -202,6 +211,9 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       setPace(0);
 
       await BleManager.startNotification(deviceId, SERVICE_UUID, CHAR_UUID);
+
+      console.log('[BLE] Connected to device:', deviceId);
+      console.log('[BLE] Notifications started on', SERVICE_UUID, '/', CHAR_UUID);
 
       setConnectedDeviceId(deviceId);
       setConnectionStatus(`Connected to ${DEVICE_NAME}`);

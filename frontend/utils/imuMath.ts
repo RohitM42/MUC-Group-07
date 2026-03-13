@@ -20,19 +20,30 @@ export interface DerivedMetrics {
 // Unpacks the 36-byte BLE notification from the Arduino into 9 floats.
 
 export function unpackIMU(data: number[], timestamp: number): RawIMU {
+  console.log('[IMU] raw bytes length:', data.length, 'bytes:', JSON.stringify(data));
+
+  if (data.length < 36) {
+    console.warn('[IMU] packet too short — expected 36 bytes, got', data.length);
+    return { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0, mx: 0, my: 0, mz: 0, timestamp };
+  }
+
   const buf = new DataView(new Uint8Array(data).buffer);
-  return {
-    ax: buf.getFloat32(0,  true),
-    ay: buf.getFloat32(4,  true),
-    az: buf.getFloat32(8,  true),
-    gx: buf.getFloat32(12, true),
-    gy: buf.getFloat32(16, true),
-    gz: buf.getFloat32(20, true),
-    mx: buf.getFloat32(24, true),
-    my: buf.getFloat32(28, true),
-    mz: buf.getFloat32(32, true),
-    timestamp,
-  };
+
+  const ax = buf.getFloat32(0,  true);
+  const ay = buf.getFloat32(4,  true);
+  const az = buf.getFloat32(8,  true);
+  const gx = buf.getFloat32(12, true);
+  const gy = buf.getFloat32(16, true);
+  const gz = buf.getFloat32(20, true);
+  const mx = buf.getFloat32(24, true);
+  const my = buf.getFloat32(28, true);
+  const mz = buf.getFloat32(32, true);
+
+  console.log('[IMU] ACC:', ax, ay, az);
+  console.log('[IMU] GYR:', gx, gy, gz);
+  console.log('[IMU] MAG:', mx, my, mz);
+
+  return { ax, ay, az, gx, gy, gz, mx, my, mz, timestamp };
 }
 
 // Derived metrics --------------------------------------------------------------
