@@ -7,8 +7,8 @@ import os
 from bleak import BleakScanner, BleakClient
 
 #the device name and uuid are dependent on the code on the arduino and may need to be changed
-DEVICE_NAME = "Nano33BLE_IMU"
-CHAR_UUID = "19B10011-E8F2-537E-4F6C-D104768A1214"
+DEVICE_NAME = "IMU_Master"
+CHAR_UUID = "19B10021-E8F2-537E-4F6C-D104768A1214"
 start_time = None
 
 # ---------- CSV Setup ----------
@@ -31,24 +31,34 @@ def handle_data(sender, data):
 
     global start_time
 
-    values = struct.unpack("fffffffff", data)
+    values = struct.unpack("ffffffffffffffffff", data)
 
-    ax, ay, az = values[0:3]
-    gx, gy, gz = values[3:6]
-    mx, my, mz = values[6:9]
+    ax1, ay1, az1 = values[0:3]
+    gx1, gy1, gz1 = values[3:6]
+    mx1, my1, mz1 = values[6:9]
+
+    ax2, ay2, az2 = values[9:12]
+    gx2, gy2, gz2 = values[12:15]
+    mx2, my2, mz2 = values[15:18]
 
     # Relative time in milliseconds since connection
     t = int((time.time() - start_time) * 1000)
 
-    print("ACC:", ax, ay, az,
-          "GYR:", gx, gy, gz,
-          "MAG:", mx, my, mz)
+    print("ACC1:", ax1, ay1, az1,
+          "GYR1:", gx1, gy1, gz1,
+          "MAG1:", mx1, my1, mz1,
+          "ACC2:", ax2, ay2, az2,
+          "GYR2:", gx2, gy2, gz2,
+          "MAG2:", mx2, my2, mz2)
 
     csv_writer.writerow([
         t,
-        ax, ay, az,
-        gx, gy, gz,
-        mx, my, mz
+        ax1, ay1, az1,
+        gx1, gy1, gz1,
+        mx1, my1, mz1,
+        ax2, ay2, az2,
+        gx2, gy2, gz2,
+        mx2, my2, mz2
     ])
 
 
