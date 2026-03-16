@@ -1,15 +1,18 @@
 #include <ArduinoBLE.h>
 #include <Arduino_LSM9DS1.h>
+#include <MadgwickAHRS.h>
+
+Madgwick filter;
 
 BLEService imuService("19B10010-E8F2-537E-4F6C-D104768A1214");
 
 BLECharacteristic imuChar(
   "19B10011-E8F2-537E-4F6C-D104768A1214",
   BLERead | BLENotify,
-  36
+  12
 );
 
-float data[9];
+float data[3];
 
 void setup() {
 
@@ -25,6 +28,8 @@ void setup() {
     Serial.println("IMU failed");
     while (1);
   }
+
+  filter.begin(200);
 
   BLE.setLocalName("IMU_Sender");
   BLE.setAdvertisedService(imuService);
@@ -48,20 +53,33 @@ void loop() {
 
     while (central.connected()) {
 
-      if (IMU.accelerationAvailable())
-        IMU.readAcceleration(data[0], data[1], data[2]);
+      float ax, ay, az;
+      float gx, gy, gz;
 
-      if (IMU.gyroscopeAvailable())
-        IMU.readGyroscope(data[3], data[4], data[5]);
+      if (IMU.accelerationAvailable() &&
+          IMU.gyroscopeAvailable()) {
 
-      if (IMU.magneticFieldAvailable())
-        IMU.readMagneticField(data[6], data[7], data[8]);
+        IMU.readAcceleration(ax, ay, az);
+        IMU.readGyroscope(gx, gy, gz);
 
-      imuChar.writeValue((byte*)data, 36);
+        float norm = sqrt(ax*ax + ay*ay + az*az);
+        ax /= norm;
+        ay /= norm;
+        az /= norm;
 
-      Serial.println("Packet sent");
+        filter.updateIMU(gx, gy, gz, ax, ay, az);
 
-      delay(100);
+        data[0]  = filter.getRoll();
+        data[1] = filter.getPitch();
+        data[2]  = filter.getYaw();
+
+        if (imuChar.subscribed()){
+          imuChar.writeValue((byte*)data, 12);
+          Serial.println("Packet sent!");
+        }
+      }
+
+      delay(50);
     }
 
     Serial.println("Disconnected");
