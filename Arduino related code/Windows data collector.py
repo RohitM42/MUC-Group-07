@@ -22,7 +22,9 @@ csv_writer = csv.writer(csv_file)
 csv_writer.writerow([
     "timestamp",
     "Roll1","Pitch1","Yaw1",
-    "Roll2","Pitch2","Yaw2"
+    "gx", "gy", "gz",
+    "Roll2","Pitch2","Yaw2",
+    "ax", "ay", "az"
 ])
 
 # ---------- Data Handler ----------
@@ -30,10 +32,14 @@ def handle_data(sender, data):
 
     global start_time
 
-    values = struct.unpack("ffffff", data)
+    values = struct.unpack("ffffffffffff", data)
 
+    # these values are from the foot
     Roll1, Pitch1, Yaw1 = values[0:3]
-    Roll2, Pitch2, Yaw2 = values[3:6]
+    gx, gy, gz = values[3:6]
+    #these values are from the leg
+    Roll2, Pitch2, Yaw2 = values[6:9]
+    ax, ay, az = values[9:12]
 
 
     # Relative time in milliseconds since connection
@@ -42,14 +48,22 @@ def handle_data(sender, data):
     print("Roll1:", Roll1,
           "Pitch1:", Pitch1,
           "Yaw1:", Yaw1,
+          "gx:", gx,
+          "gy:", gy,
+          "gz:", gz,
           "Roll2:", Roll2,
           "Pitch2:", Pitch2,
-          "Yaw2:", Yaw2)
+          "Yaw2:", Yaw2,
+          "ax:", ax,
+          "ay:", ay,
+          "az:", az)
 
     csv_writer.writerow([
         t,
-         Roll1, Pitch1, Yaw1,
-        Roll2, Pitch2, Yaw2
+        Roll1, Pitch1, Yaw1,
+        gx, gy, gz,
+        Roll2, Pitch2, Yaw2,
+        ax, ay, az
     ])
 
 

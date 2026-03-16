@@ -12,10 +12,10 @@ BLEService forwardService("19B10020-E8F2-537E-4F6C-D104768A1214");
 BLECharacteristic forwardChar(
   "19B10021-E8F2-537E-4F6C-D104768A1214",
   BLERead | BLENotify,
-  24
+  48
 );
 
-float packet[6];
+float packet[12];
 
 void setup() {
 
@@ -76,7 +76,7 @@ void loop() {
 
             if (slaveChar.valueUpdated()) {
 
-              slaveChar.readValue((byte*)packet, 12);
+              slaveChar.readValue((byte*)packet, 24);
 
                     IMU.readAcceleration(ax, ay, az);
                     
@@ -89,12 +89,16 @@ void loop() {
 
                     filter.updateIMU(gx, gy, gz, ax, ay, az);
 
-                    packet[3]  = filter.getRoll();
-                    packet[4] = filter.getPitch();
-                    packet[5]  = filter.getYaw();
+                    packet[6]  = filter.getRoll();
+                    packet[7] = filter.getPitch();
+                    packet[8]  = filter.getYaw();
+
+                    packet[9] = ax;
+                    packet[10] = ay;
+                    packet[11] = az;
 
                   if (forwardChar.subscribed()) {
-                      forwardChar.writeValue((byte*)packet, 24);
+                      forwardChar.writeValue((byte*)packet, 48);
                     Serial.println("Sent packet to Python");
                   }
                  

@@ -9,10 +9,10 @@ BLEService imuService("19B10010-E8F2-537E-4F6C-D104768A1214");
 BLECharacteristic imuChar(
   "19B10011-E8F2-537E-4F6C-D104768A1214",
   BLERead | BLENotify,
-  12
+  24
 );
 
-float data[3];
+float data[6];
 
 void setup() {
 
@@ -72,14 +72,17 @@ void loop() {
         data[0]  = filter.getRoll();
         data[1] = filter.getPitch();
         data[2]  = filter.getYaw();
+        data[3] = gx;
+        data[4] = gy;
+        data[5] = gz;
 
         if (imuChar.subscribed()){
-          imuChar.writeValue((byte*)data, 12);
+          imuChar.writeValue((byte*)data, 24);
           Serial.println("Packet sent!");
         }
       }
 
-      delay(50);
+      delay(50); //20hz
     }
 
     Serial.println("Disconnected");
