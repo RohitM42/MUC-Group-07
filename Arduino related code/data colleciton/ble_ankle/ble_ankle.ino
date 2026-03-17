@@ -98,7 +98,7 @@ void loop() {
                     packet[11] = az;
 
                   if (forwardChar.subscribed()) {
-                      forwardChar.writeValue((byte*)packet, 48);
+                    forwardChar.writeValue((byte*)packet, 48);
                     Serial.println("Sent packet to Python");
                   }
                  

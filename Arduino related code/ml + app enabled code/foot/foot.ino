@@ -92,9 +92,10 @@ void loop() {
             outPacket[3] = ankleData[2];
             outPacket[4] = ankleData[3];
 
-            footChar.writeValue((byte*)outPacket,20);
-
-            Serial.println("Forwarded result to Python");
+			if(footChar.subscribed()){
+				footChar.writeValue((byte*)outPacket,20);
+				Serial.println("Forwarded result to Python");
+			}
           }
 
           BLE.poll();

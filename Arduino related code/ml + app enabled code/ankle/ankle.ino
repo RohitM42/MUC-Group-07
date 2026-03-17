@@ -189,7 +189,10 @@ void loop() {
       packet[4] = roll;
       packet[5] = yaw;
 
-      ankleChar.writeValue((byte*)packet,24);
+	  if(ankleChar.subscribed()){
+		ankleChar.writeValue((byte*)packet,24);
+		Serial.println("Forwarded data to foot");
+	  }
 
       delay(50);
     }
