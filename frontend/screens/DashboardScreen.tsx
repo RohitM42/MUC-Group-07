@@ -56,7 +56,7 @@ export default function DashboardScreen() {
   const navigation      = useNavigation<NavProp>();
   const { colours }     = useTheme();
   const s               = makeStyles(colours);
-  const { isConnected, connectionStatus, stepCount, pace, derived } = useBle();
+  const { isConnected, connectionStatus, stepCount, pace, derived, rawIMU, walking, isRecording, startSession, stopSession } = useBle();
 
   const roll        = derived ? derived.roll.toFixed(1) : '—';
   const correctness = derived ? getRollCorrectness(derived.roll) : null;
@@ -94,28 +94,45 @@ export default function DashboardScreen() {
       </View>
 
       {/* Classification badge ------------------------------------------------ */}
-      <ClassificationBadge label="—" colours={colours} />
+      <ClassificationBadge
+        label={isConnected ? (walking ? 'Walking' : 'Standing') : '—'}
+        colours={colours}
+      />
 
       {/* Orientation correctness --------------------------------------------- */}
       <View style={[s.correctnessBar, { borderLeftColor: correctnessColor }]}>
         <Text style={s.eyebrow}>Foot Orientation</Text>
         <Text style={[s.correctnessLabel, { color: correctnessColor }]}>{correctnessLabel}</Text>
-        {derived && <Text style={s.correctnessAngle}>Roll angle: {roll}°</Text>}
+        {derived && <Text style={s.correctnessAngle}>Roll: {roll}°{rawIMU ? `  |  Foot angle: ${rawIMU.footAngle.toFixed(1)}°` : ''}</Text>}
       </View>
 
       {/* Metrics grid -------------------------------------------------------- */}
       <Text style={s.sectionTitle}>Session Stats</Text>
       <View style={s.grid}>
-        <MetricCard label="Steps"         value={stepDisplay}                                       colours={colours} />
-        <MetricCard label="Pace"          value={paceDisplay}  unit="spm"                           colours={colours} />
-        <MetricCard label="Roll Angle"    value={roll}         unit="°"   accent={derived ? correctnessColor : undefined} colours={colours} />
-        <MetricCard label="Angular Speed" value={derived ? derived.angularSpeed.toFixed(1) : '—'} unit="°/s" colours={colours} />
+        <MetricCard label="Steps"      value={stepDisplay}                                                             colours={colours} />
+        <MetricCard label="Pace"       value={paceDisplay}  unit="spm"                                                 colours={colours} />
+        <MetricCard label="Roll Angle" value={roll}         unit="°"   accent={derived ? correctnessColor : undefined} colours={colours} />
+        <MetricCard label="Foot Angle"  value={rawIMU ? rawIMU.footAngle.toFixed(1) : '—'} unit="°"                     colours={colours} />
+        <MetricCard label="Acceleration"       value={derived ? derived.totalAccel.toFixed(2) : '—'} unit="g"                 colours={colours} />
       </View>
+
+      {/* Session recording button -------------------------------------------- */}
+      {isConnected && (
+        <TouchableOpacity
+          style={[s.sessionButton, isRecording ? s.sessionButtonStop : s.sessionButtonStart]}
+          onPress={isRecording ? stopSession : startSession}
+          activeOpacity={0.8}
+        >
+          <Text style={s.sessionButtonText}>
+            {isRecording ? '⏹  End Session' : '⏺  Start Session'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* No connection nudge ------------------------------------------------- */}
       {!isConnected && (
         <TouchableOpacity style={s.nudge} onPress={() => navigation.navigate('Connect')} activeOpacity={0.8}>
-          <Text style={s.nudgeText}>⊙  Scan for Nano33BLE_IMU to start tracking</Text>
+          <Text style={s.nudgeText}>⊙  Scan for IMU_Foot to start tracking</Text>
         </TouchableOpacity>
       )}
 
@@ -212,6 +229,15 @@ function makeStyles(c: ColourPalette) {
     cardValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
     cardValue:    { color: c.text, fontSize: 26, fontWeight: '700' },
     cardUnit:     { color: c.textSub, fontSize: 13 },
+
+    sessionButton: {
+      borderRadius: 10,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    sessionButtonStart: { backgroundColor: c.accent },
+    sessionButtonStop:  { backgroundColor: c.error },
+    sessionButtonText:  { color: '#fff', fontWeight: '700', fontSize: 15 },
 
     nudge: {
       backgroundColor: c.surface,
