@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { ColourPalette } from '../constants/colours';
-import { MOCK_SESSIONS, USE_MOCK_DATA, SessionRecord } from '../utils/mockSessions';
+import { MOCK_SESSIONS, SessionRecord } from '../utils/mockSessions';
+import { loadRealSessions } from '../utils/sessionStore';
 
 // Helpers ---------------------------------------------------------------------
 
@@ -115,6 +117,10 @@ function SessionCard({ session, colours }: { session: SessionRecord; colours: Co
           <Text style={s.quickLabel}>Avg Pace (spm)</Text>
         </View>
         <View style={s.quickStat}>
+          <Text style={s.quickValue}>{session.avgFootAngle.toFixed(1)}°</Text>
+          <Text style={s.quickLabel}>Avg Foot Angle</Text>
+        </View>
+        <View style={s.quickStat}>
           <Text style={[s.quickValue, { color: correctnessColor(session.percentCorrect, colours) }]}>
             {session.percentCorrect}%
           </Text>
@@ -125,6 +131,10 @@ function SessionCard({ session, colours }: { session: SessionRecord; colours: Co
       {/* Expanded detail */}
       {expanded && (
         <View style={s.expandedSection}>
+          <View style={s.detailRow}>
+            <Text style={s.detailLabel}>Avg foot angle</Text>
+            <Text style={s.detailValue}>{session.avgFootAngle.toFixed(1)}°</Text>
+          </View>
           <View style={s.detailRow}>
             <Text style={s.detailLabel}>Walking time</Text>
             <Text style={s.detailValue}>{session.walkingPct}% of session</Text>
@@ -146,8 +156,15 @@ export default function HistoryScreen() {
   const { colours } = useTheme();
   const s = makeStyles(colours);
 
-  // Swap MOCK_SESSIONS for real AsyncStorage sessions once wired up
-  const sessions: SessionRecord[] = USE_MOCK_DATA ? MOCK_SESSIONS : [];
+  const [realSessions, setRealSessions] = useState<SessionRecord[]>([]);
+
+  // Reload from AsyncStorage every time the tab comes into focus
+  useFocusEffect(useCallback(() => {
+    loadRealSessions().then(setRealSessions);
+  }, []));
+
+  // Real sessions first (newest), mock data appended after to fill out the list
+  const sessions: SessionRecord[] = [...realSessions, ...MOCK_SESSIONS];
 
   return (
     <FlatList
@@ -159,7 +176,7 @@ export default function HistoryScreen() {
         <>
           <View style={s.headerRow}>
             <Text style={s.title}>History</Text>
-            {USE_MOCK_DATA && (
+            {realSessions.length === 0 && (
               <View style={s.mockBadge}>
                 <Text style={s.mockBadgeText}>MOCK DATA</Text>
               </View>

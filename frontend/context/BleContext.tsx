@@ -21,7 +21,9 @@ import {
   resetPace,
   RawIMU,
   DerivedMetrics,
+  ROLL_WARN_THRESHOLD,
 } from '../utils/imuMath';
+import { saveSession } from '../utils/sessionStore';
 
 // Types -----------------------------------------------------------------------
 
@@ -49,6 +51,11 @@ interface BleContextValue {
   // Session stats
   stepCount: number;
   pace: number; // steps per minute
+
+  // Recording
+  isRecording: boolean;
+  startSession: () => void;
+  stopSession: () => Promise<void>;
 
   // Actions
   startScan: () => Promise<void>;
@@ -80,7 +87,17 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const [stepCount, setStepCount]               = useState(0);
   const [pace, setPace]                         = useState(0);
 
+  const [isRecording, setIsRecording] = useState(false);
+
   const connectionStartTime = useRef<number>(0);
+
+  // Recording counters — only accumulate while isRecording is true
+  const sessionStartTime  = useRef<number>(0);
+  const stepCountAtStart  = useRef<number>(0);
+  const totalReadings     = useRef<number>(0);
+  const correctReadings   = useRef<number>(0);
+  const walkingReadings   = useRef<number>(0);
+  const footAngleSum      = useRef<number>(0);
 
   // Throttle: only push a UI update every 100ms (10Hz) regardless of 50Hz BLE stream
   const lastUIUpdate = useRef<number>(0);
@@ -124,6 +141,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         setRawIMU(null);
         setDerived(null);
         setWalking(false);
+        setIsRecording(false);
       }
     });
 
@@ -141,6 +159,14 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       if (isStep) {
         setStepCount(prev => prev + 1);
         setPace(updatePace(timestamp));
+      }
+
+      // Accumulate recording stats on every sample while a session is active
+      if (isRecording) {
+        totalReadings.current++;
+        if (Math.abs(metrics.roll) <= ROLL_WARN_THRESHOLD) correctReadings.current++;
+        if (imu.walking) walkingReadings.current++;
+        footAngleSum.current += imu.footAngle;
       }
 
       // Throttle UI renders to 10Hz
@@ -230,6 +256,38 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const startSession = useCallback(() => {
+    sessionStartTime.current  = Date.now();
+    stepCountAtStart.current  = stepCount;
+    totalReadings.current     = 0;
+    correctReadings.current   = 0;
+    walkingReadings.current   = 0;
+    footAngleSum.current      = 0;
+    setIsRecording(true);
+  }, [stepCount]);
+
+  const stopSession = useCallback(async () => {
+    if (!isRecording) return;
+    setIsRecording(false);
+
+    const durationSecs   = Math.round((Date.now() - sessionStartTime.current) / 1000);
+    const sessionSteps   = stepCount - stepCountAtStart.current;
+    const total          = totalReadings.current;
+
+    if (total === 0 || durationSecs < 5) return; // discard accidental taps
+
+    await saveSession({
+      id:             Date.now().toString(),
+      date:           new Date(sessionStartTime.current).toISOString(),
+      durationSecs,
+      steps:          sessionSteps,
+      avgPace:        pace,
+      percentCorrect: Math.round((correctReadings.current / total) * 100),
+      walkingPct:     Math.round((walkingReadings.current / total) * 100),
+      avgFootAngle:   parseFloat((footAngleSum.current / total).toFixed(1)),
+    });
+  }, [isRecording, stepCount, pace]);
+
   const disconnect = useCallback(async () => {
     if (!connectedDeviceId) return;
     try {
@@ -253,6 +311,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       rawIMU, derived,
       walking,
       stepCount, pace,
+      isRecording, startSession, stopSession,
       startScan, connect, disconnect,
     }}>
       {children}

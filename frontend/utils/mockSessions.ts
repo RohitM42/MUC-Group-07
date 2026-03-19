@@ -6,6 +6,7 @@ export interface SessionRecord {
   avgPace:        number;  // steps per minute
   percentCorrect: number;  // 0–100, % of readings where roll was in correct range
   walkingPct:     number;  // 0–100, % of session classified as walking
+  avgFootAngle:   number;  // average footAngle value across the session (degrees)
 }
 
 // Toggle this to false once real AsyncStorage sessions are wired up
@@ -20,6 +21,7 @@ export const MOCK_SESSIONS: SessionRecord[] = [
     avgPace:        83,
     percentCorrect: 91,
     walkingPct:     78,
+    avgFootAngle:   4.2,
   },
   {
     id:             'mock-2',
@@ -29,6 +31,7 @@ export const MOCK_SESSIONS: SessionRecord[] = [
     avgPace:        79,
     percentCorrect: 74,
     walkingPct:     65,
+    avgFootAngle:   11.7,
   },
   {
     id:             'mock-3',
@@ -38,6 +41,7 @@ export const MOCK_SESSIONS: SessionRecord[] = [
     avgPace:        87,
     percentCorrect: 88,
     walkingPct:     82,
+    avgFootAngle:   6.1,
   },
   {
     id:             'mock-4',
@@ -47,6 +51,7 @@ export const MOCK_SESSIONS: SessionRecord[] = [
     avgPace:        71,
     percentCorrect: 55,
     walkingPct:     59,
+    avgFootAngle:   18.4,
   },
   {
     id:             'mock-5',
@@ -56,6 +61,7 @@ export const MOCK_SESSIONS: SessionRecord[] = [
     avgPace:        85,
     percentCorrect: 96,
     walkingPct:     88,
+    avgFootAngle:   2.9,
   },
   {
     id:             'mock-6',
@@ -65,5 +71,6 @@ export const MOCK_SESSIONS: SessionRecord[] = [
     avgPace:        77,
     percentCorrect: 62,
     walkingPct:     70,
+    avgFootAngle:   14.3,
   },
 ];
