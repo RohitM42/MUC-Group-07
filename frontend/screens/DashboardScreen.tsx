@@ -56,7 +56,7 @@ export default function DashboardScreen() {
   const navigation      = useNavigation<NavProp>();
   const { colours }     = useTheme();
   const s               = makeStyles(colours);
-  const { isConnected, connectionStatus, stepCount, pace, derived } = useBle();
+  const { isConnected, connectionStatus, stepCount, pace, derived, rawIMU, walking } = useBle();
 
   const roll        = derived ? derived.roll.toFixed(1) : '—';
   const correctness = derived ? getRollCorrectness(derived.roll) : null;
@@ -94,28 +94,34 @@ export default function DashboardScreen() {
       </View>
 
       {/* Classification badge ------------------------------------------------ */}
-      <ClassificationBadge label="—" colours={colours} />
+      <ClassificationBadge
+        label={isConnected ? (walking ? 'Walking' : 'Standing') : '—'}
+        colours={colours}
+      />
 
       {/* Orientation correctness --------------------------------------------- */}
       <View style={[s.correctnessBar, { borderLeftColor: correctnessColor }]}>
         <Text style={s.eyebrow}>Foot Orientation</Text>
         <Text style={[s.correctnessLabel, { color: correctnessColor }]}>{correctnessLabel}</Text>
-        {derived && <Text style={s.correctnessAngle}>Roll angle: {roll}°</Text>}
+        {derived && <Text style={s.correctnessAngle}>Roll: {roll}°{rawIMU ? `  |  Foot angle: ${rawIMU.footAngle.toFixed(1)}°` : ''}</Text>}
       </View>
 
       {/* Metrics grid -------------------------------------------------------- */}
       <Text style={s.sectionTitle}>Session Stats</Text>
       <View style={s.grid}>
-        <MetricCard label="Steps"         value={stepDisplay}                                       colours={colours} />
-        <MetricCard label="Pace"          value={paceDisplay}  unit="spm"                           colours={colours} />
-        <MetricCard label="Roll Angle"    value={roll}         unit="°"   accent={derived ? correctnessColor : undefined} colours={colours} />
-        <MetricCard label="Angular Speed" value={derived ? derived.angularSpeed.toFixed(1) : '—'} unit="°/s" colours={colours} />
+        <MetricCard label="Steps"      value={stepDisplay}                                                               colours={colours} />
+        <MetricCard label="Pace"       value={paceDisplay}  unit="spm"                                                   colours={colours} />
+        <MetricCard label="Roll Angle" value={roll}         unit="°"   accent={derived ? correctnessColor : undefined}   colours={colours} />
+        <MetricCard label="Foot Angle" value={rawIMU ? rawIMU.footAngle.toFixed(1) : '—'} unit="°"                       colours={colours} />
+        <MetricCard label="Accel X"    value={rawIMU ? rawIMU.ax.toFixed(2) : '—'}        unit="g"                       colours={colours} />
+        <MetricCard label="Accel Y"    value={rawIMU ? rawIMU.ay.toFixed(2) : '—'}        unit="g"                       colours={colours} />
+        <MetricCard label="Accel Z"    value={rawIMU ? rawIMU.az.toFixed(2) : '—'}        unit="g"                       colours={colours} />
       </View>
 
       {/* No connection nudge ------------------------------------------------- */}
       {!isConnected && (
         <TouchableOpacity style={s.nudge} onPress={() => navigation.navigate('Connect')} activeOpacity={0.8}>
-          <Text style={s.nudgeText}>⊙  Scan for Nano33BLE_IMU to start tracking</Text>
+          <Text style={s.nudgeText}>⊙  Scan for IMU_Foot to start tracking</Text>
         </TouchableOpacity>
       )}
 

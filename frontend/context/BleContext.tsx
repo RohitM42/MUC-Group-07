@@ -43,6 +43,9 @@ interface BleContextValue {
   rawIMU: RawIMU | null;
   derived: DerivedMetrics | null;
 
+  // Classification (from Arduino TinyML)
+  walking: boolean;
+
   // Session stats
   stepCount: number;
   pace: number; // steps per minute
@@ -73,6 +76,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
   const [rawIMU, setRawIMU]                     = useState<RawIMU | null>(null);
   const [derived, setDerived]                   = useState<DerivedMetrics | null>(null);
+  const [walking, setWalking]                   = useState(false);
   const [stepCount, setStepCount]               = useState(0);
   const [pace, setPace]                         = useState(0);
 
@@ -119,6 +123,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         setConnectionStatus('Disconnected');
         setRawIMU(null);
         setDerived(null);
+        setWalking(false);
       }
     });
 
@@ -144,6 +149,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
 
       setRawIMU(imu);
       setDerived(metrics);
+      setWalking(imu.walking);
     });
 
     return () => {
@@ -236,6 +242,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     setConnectionStatus('Disconnected');
     setRawIMU(null);
     setDerived(null);
+    setWalking(false);
   }, [connectedDeviceId]);
 
   // ---------------------------------------------------------------------------
@@ -244,6 +251,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     <BleContext.Provider value={{
       isScanning, devices, connectedDeviceId, connectionStatus, isConnected,
       rawIMU, derived,
+      walking,
       stepCount, pace,
       startScan, connect, disconnect,
     }}>
