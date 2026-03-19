@@ -113,7 +113,7 @@ export default function DashboardScreen() {
         <MetricCard label="Pace"       value={paceDisplay}  unit="spm"                                                 colours={colours} />
         <MetricCard label="Roll Angle" value={roll}         unit="°"   accent={derived ? correctnessColor : undefined} colours={colours} />
         <MetricCard label="Foot Angle"  value={rawIMU ? rawIMU.footAngle.toFixed(1) : '—'} unit="°"                     colours={colours} />
-        <MetricCard label="Accel"       value={derived ? derived.totalAccel.toFixed(2) : '—'} unit="g"                 colours={colours} />
+        <MetricCard label="Acceleration"       value={derived ? derived.totalAccel.toFixed(2) : '—'} unit="g"                 colours={colours} />
       </View>
 
       {/* Session recording button -------------------------------------------- */}
