@@ -123,12 +123,13 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     // BLE event listeners -------------------------------------------------------
 
     const onDiscover = BleManager.onDiscoverPeripheral((peripheral) => {
+      if (!peripheral.name) return;
       setDevices(prev => {
         if (prev.some(d => d.id === peripheral.id)) return prev;
         console.log('Discovered device:', peripheral.id, peripheral.name);
         return [...prev, {
           id:   peripheral.id,
-          name: peripheral.name || 'Unknown Device',
+          name: peripheral.name,
           rssi: peripheral.rssi,
         }];
       });
@@ -214,11 +215,13 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         await BleManager.stopScan();
         const peripherals = await BleManager.getDiscoveredPeripherals();
         setDevices(
-          peripherals.map(p => ({
-            id:   p.id,
-            name: p.name || 'Unknown Device',
-            rssi: p.rssi,
-          }))
+          peripherals
+            .filter(p => p.name)
+            .map(p => ({
+              id:   p.id,
+              name: p.name!,
+              rssi: p.rssi,
+            }))
         );
         setIsScanning(false);
       }, 5500);
