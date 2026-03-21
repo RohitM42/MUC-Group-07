@@ -4,8 +4,6 @@
 
 Madgwick filter;
 
-const int ledPin = 13;
-
 const char* slaveName = "IMU_Sender";
 const char* slaveCharUUID = "19B10011-E8F2-537E-4F6C-D104768A1214";
 
@@ -19,41 +17,19 @@ BLECharacteristic forwardChar(
 
 float packet[12];
 
-void LongBlink(){
-  digitalWrite(ledPin, HIGH);
-  delay(1000);                
-  digitalWrite(ledPin, LOW);  
-  delay(1000);
-}
-
-void ShortBlink(){
-  digitalWrite(ledPin, HIGH);
-  delay(200);                
-  digitalWrite(ledPin, LOW);  
-  delay(200);
-}
-
 void setup() {
-  pinMode(ledPin,OUTPUT);
+
+  Serial.begin(115200);
+  while (!Serial);
 
   if (!BLE.begin()) {
-    while (1){
-      LongBlink();
-      LongBlink();
-      ShortBlink();
-      ShortBlink();
-      delay(1000);                
-    }
+    Serial.println("BLE failed");
+    while (1);
   }
 
   if (!IMU.begin()) {
-    while (1){
-      LongBlink();
-      LongBlink();
-      LongBlink();
-      ShortBlink();
-      delay(1000);                
-    }
+    Serial.println("IMU failed");
+    while (1);
   }
 
   BLE.setLocalName("IMU_Master");
@@ -66,6 +42,8 @@ void setup() {
 
   BLE.advertise();
 
+  Serial.println("Master advertising for Python");
+
   BLE.scan();
 }
 
@@ -75,10 +53,12 @@ void loop() {
 
   if (peripheral && peripheral.localName() == slaveName) {
 
+    Serial.println("Slave found");
     BLE.stopScan();
 
     if (peripheral.connect()) {
 
+      Serial.println("Connected to slave");
 
       if (peripheral.discoverAttributes()) {
 
@@ -119,6 +99,7 @@ void loop() {
 
                   if (forwardChar.subscribed()) {
                     forwardChar.writeValue((byte*)packet, 48);
+                    Serial.println("Sent packet to Python");
                   }
                  
 
@@ -130,6 +111,7 @@ void loop() {
         }
       }
 
+      Serial.println("Slave disconnected");
       BLE.scan();
     }
   }

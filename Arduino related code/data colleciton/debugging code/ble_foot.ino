@@ -4,8 +4,6 @@
 
 Madgwick filter;
 
-const int ledPin = 13;
-
 BLEService imuService("19B10010-E8F2-537E-4F6C-D104768A1214");
 
 BLECharacteristic imuChar(
@@ -16,40 +14,19 @@ BLECharacteristic imuChar(
 
 float data[6];
 
-void LongBlink(){
-  digitalWrite(ledPin, HIGH);
-  delay(1000);                
-  digitalWrite(ledPin, LOW);  
-  delay(1000);
-}
-
-void ShortBlink(){
-  digitalWrite(ledPin, HIGH);
-  delay(200);                
-  digitalWrite(ledPin, LOW);  
-  delay(200);
-}
-
 void setup() {
 
+  Serial.begin(115200);
+  while (!Serial);
+
   if (!BLE.begin()) {
-    while (1){
-      LongBlink();
-      LongBlink();
-      ShortBlink();
-      ShortBlink();
-      delay(1000);                
-    }
+    Serial.println("BLE failed");
+    while (1);
   }
 
   if (!IMU.begin()) {
-    while (1){
-      LongBlink();
-      LongBlink();
-      LongBlink();
-      ShortBlink();
-      delay(1000);                
-    }
+    Serial.println("IMU failed");
+    while (1);
   }
 
   filter.begin(200);
@@ -62,6 +39,7 @@ void setup() {
 
   BLE.advertise();
 
+  Serial.println("Sender advertising...");
 }
 
 void loop() {
@@ -69,6 +47,9 @@ void loop() {
   BLEDevice central = BLE.central();
 
   if (central) {
+
+    Serial.print("Connected to: ");
+    Serial.println(central.address());
 
     while (central.connected()) {
 
@@ -97,11 +78,13 @@ void loop() {
 
         if (imuChar.subscribed()){
           imuChar.writeValue((byte*)data, 24);
+          Serial.println("Packet sent!");
         }
       }
 
       delay(50); //20hz
     }
 
+    Serial.println("Disconnected");
   }
 }
