@@ -233,8 +233,10 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     try {
       await BleManager.connect(deviceId);
       await BleManager.retrieveServices(deviceId);
-      const negotiatedMTU = await BleManager.requestMTU(deviceId, 64);
-      console.log('[BLE] Negotiated MTU:', negotiatedMTU);
+      if (Platform.OS === 'android') {
+        const negotiatedMTU = await BleManager.requestMTU(deviceId, 64);
+        console.log('[BLE] Negotiated MTU:', negotiatedMTU);
+      }
 
       connectionStartTime.current = Date.now();
       resetStepDetector();
