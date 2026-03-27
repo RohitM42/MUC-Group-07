@@ -270,10 +270,10 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       activeConfig.current = matchedConfig;
 
       console.log('[BLE] Connected to device:', deviceId);
-      console.log('[BLE] Notifications started on', config.serviceUUID, '/', config.charUUID);
+      console.log('[BLE] Notifications started on', matchedConfig.serviceUUID, '/', matchedConfig.charUUID);
 
       setConnectedDeviceId(deviceId);
-      setConnectionStatus(`Connected to ${config.name}`);
+      setConnectionStatus(`Connected to ${matchedConfig.name}`);
     } catch (e: any) {
       console.error('Connect error:', e);
       setConnectionStatus(`Failed: ${e?.message ?? 'unknown error'}`);
