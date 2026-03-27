@@ -70,9 +70,9 @@ export default function ConnectScreen() {
 
   const [connectingId, setConnectingId] = React.useState<string | null>(null);
 
-  async function handleConnect(deviceId: string) {
+  async function handleConnect(deviceId: string, deviceName: string) {
     setConnectingId(deviceId);
-    await connect(deviceId);
+    await connect(deviceId, deviceName);
     setConnectingId(null);
   }
 
@@ -133,7 +133,7 @@ export default function ConnectScreen() {
               isConnecting={item.id === connectingId}
               colours={colours}
               onPress={() =>
-                item.id === connectedDeviceId ? disconnect() : handleConnect(item.id)
+                item.id === connectedDeviceId ? disconnect() : handleConnect(item.id, item.name)
               }
             />
           )}
