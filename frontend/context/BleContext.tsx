@@ -88,6 +88,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const [pace, setPace]                         = useState(0);
 
   const [isRecording, setIsRecording] = useState(false);
+  const isRecordingRef = useRef(false);
 
   const connectionStartTime = useRef<number>(0);
   const activeConfig        = useRef<DeviceConfig>(FOOT_DEVICE);
@@ -104,6 +105,9 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const lastUIUpdate = useRef<number>(0);
 
   const isConnected = connectedDeviceId !== null;
+
+  // Keep ref in sync so the BLE listener always sees the current value
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
 
   // Initialise BLE on mount ----------------------------------------------------
 
@@ -140,6 +144,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         setRawIMU(null);
         setDerived(null);
         setWalking(false);
+        isRecordingRef.current = false;
         setIsRecording(false);
       }
     });
@@ -161,7 +166,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Accumulate recording stats on every sample while a session is active
-      if (isRecording) {
+      if (isRecordingRef.current) {
         totalReadings.current++;
         if (Math.abs(metrics.roll) <= ROLL_WARN_THRESHOLD) correctReadings.current++;
         if (imu.walking) walkingReadings.current++;
@@ -283,11 +288,13 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     correctReadings.current   = 0;
     walkingReadings.current   = 0;
     footAngleSum.current      = 0;
+    isRecordingRef.current = true;
     setIsRecording(true);
   }, [stepCount]);
 
   const stopSession = useCallback(async () => {
-    if (!isRecording) return;
+    if (!isRecordingRef.current) return;
+    isRecordingRef.current = false;
     setIsRecording(false);
 
     const durationSecs   = Math.round((Date.now() - sessionStartTime.current) / 1000);
