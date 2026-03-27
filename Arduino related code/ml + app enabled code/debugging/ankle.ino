@@ -5,8 +5,6 @@
 
 Madgwick filter;
 
-const int ledPin = 13;
-
 BLEService ankleService("19B10030-E8F2-537E-4F6C-D104768A1214");
 
 BLECharacteristic ankleChar(
@@ -16,20 +14,6 @@ BLECharacteristic ankleChar(
 );
 
 float packet[6];
-
-void LongBlink(){
-  digitalWrite(ledPin, HIGH);
-  delay(1000);                
-  digitalWrite(ledPin, LOW);  
-  delay(1000);
-}
-
-void ShortBlink(){
-  digitalWrite(ledPin, HIGH);
-  delay(200);                
-  digitalWrite(ledPin, LOW);  
-  delay(200);
-}
 
 //tinyML defintions
 #define INPUT_SIZE 4
@@ -149,27 +133,12 @@ bool walkingClassifier()
 // end of tinyML definitions
 
 void setup() {
-  pinMode(ledPin,OUTPUT);
 
-  if (!BLE.begin()) {
-    while (1){
-      LongBlink();
-      LongBlink();
-      ShortBlink();
-      ShortBlink();
-      delay(1000);                
-    }
-  }
+  Serial.begin(115200);
+  while(!Serial);
 
-  if (!IMU.begin()) {
-    while (1){
-      LongBlink();
-      LongBlink();
-      LongBlink();
-      ShortBlink();
-      delay(1000);                
-    }
-  }
+  IMU.begin();
+  BLE.begin();
 
   filter.begin(200);
 
@@ -181,6 +150,7 @@ void setup() {
 
   BLE.advertise();
 
+  Serial.println("Ankle ready");
 }
 
 void loop() {
@@ -190,6 +160,8 @@ void loop() {
   BLEDevice central = BLE.central();
 
   if (central) {
+
+    Serial.println("Foot connected");
 
     while (central.connected()) {
 
@@ -219,6 +191,7 @@ void loop() {
 
 	  if(ankleChar.subscribed()){
 		ankleChar.writeValue((byte*)packet,24);
+		Serial.println("Forwarded data to foot");
 	  }
 
       delay(50);

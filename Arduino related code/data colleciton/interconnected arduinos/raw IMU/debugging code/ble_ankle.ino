@@ -1,8 +1,5 @@
 #include <ArduinoBLE.h>
 #include <Arduino_LSM9DS1.h>
-#include <MadgwickAHRS.h>
-
-Madgwick filter;
 
 const char* slaveName = "IMU_Sender";
 const char* slaveCharUUID = "19B10011-E8F2-537E-4F6C-D104768A1214";
@@ -32,13 +29,11 @@ void setup() {
     while (1);
   }
 
-  BLE.setLocalName("IMU_Master1");
+  BLE.setLocalName("IMU_Master");
   BLE.setAdvertisedService(forwardService);
 
   forwardService.addCharacteristic(forwardChar);
   BLE.addService(forwardService);
-
-  filter.begin(200);
 
   BLE.advertise();
 
@@ -71,31 +66,18 @@ void loop() {
 
           while (peripheral.connected()) {
 
-            float ax, ay, az;
-            float gx, gy, gz;
-
             if (slaveChar.valueUpdated()) {
 
               slaveChar.readValue((byte*)packet, 24);
 
-                    IMU.readAcceleration(ax, ay, az);
+                    IMU.readAcceleration(packet[6], packet[7], packet[8]);
                     
-                    IMU.readGyroscope(gx, gy, gz);
+                    IMU.readGyroscope(packet[9], packet[10], packet[11]);
 
-                    float norm = sqrt(ax*ax + ay*ay + az*az);
-                    ax /= norm;
-                    ay /= norm;
-                    az /= norm;
-
-                    filter.updateIMU(gx, gy, gz, ax, ay, az);
-
-                    packet[6]  = filter.getRoll();
-                    packet[7] = filter.getPitch();
-                    packet[8]  = filter.getYaw();
-
-                    packet[9] = ax;
-                    packet[10] = ay;
-                    packet[11] = az;
+                    float norm = sqrt(packet[6]*packet[6] + packet[7]*packet[7] + packet[8]*packet[8]);
+                    packet[6] /= norm;
+                    packet[7] /= norm;
+                    packet[8] /= norm;
 
                   if (forwardChar.subscribed()) {
                     forwardChar.writeValue((byte*)packet, 48);

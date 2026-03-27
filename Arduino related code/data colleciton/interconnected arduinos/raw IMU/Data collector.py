@@ -7,7 +7,7 @@ import os
 from bleak import BleakScanner, BleakClient
 
 #the device name and uuid are dependent on the code on the arduino and may need to be changed
-DEVICE_NAME = "IMU_Master1"
+DEVICE_NAME = "IMU_Master"
 CHAR_UUID = "19B10021-E8F2-537E-4F6C-D104768A1214"
 start_time = None
 
@@ -21,10 +21,10 @@ csv_writer = csv.writer(csv_file)
 
 csv_writer.writerow([
     "timestamp",
-    "Roll1","Pitch1","Yaw1",
-    "gx", "gy", "gz",
-    "Roll2","Pitch2","Yaw2",
-    "ax", "ay", "az"
+    "ax1","ay1","az1",
+    "gx1", "gy1", "gz1",
+    "ax2","ay2","az2",
+    "gx2", "gy2", "gz2"
 ])
 
 # ---------- Data Handler ----------
@@ -35,35 +35,35 @@ def handle_data(sender, data):
     values = struct.unpack("ffffffffffff", data)
 
     # these values are from the foot
-    Roll1, Pitch1, Yaw1 = values[0:3]
-    gx, gy, gz = values[3:6]
+    ax1, ay1, az1 = values[0:3]
+    gx1, gy1, gz1 = values[3:6]
     #these values are from the leg
-    Roll2, Pitch2, Yaw2 = values[6:9]
-    ax, ay, az = values[9:12]
+    ax2, ay2, az2 = values[6:9]
+    gx2, gy2, gz2 = values[9:12]
 
 
     # Relative time in milliseconds since connection
     t = int((time.time() - start_time) * 1000)
 
-    print("Roll1:", Roll1,
-          "Pitch1:", Pitch1,
-          "Yaw1:", Yaw1,
-          "gx:", gx,
-          "gy:", gy,
-          "gz:", gz,
-          "Roll2:", Roll2,
-          "Pitch2:", Pitch2,
-          "Yaw2:", Yaw2,
-          "ax:", ax,
-          "ay:", ay,
-          "az:", az)
+    print("ax1:", ax1,
+          "ay1:", ay1,
+          "az1:", az1,
+          "gx1:", gx1,
+          "gy1:", gy1,
+          "gz1:", gz1,
+          "ax2:", ax2,
+          "ay2:", ay2,
+          "az2:", az2,
+          "gx2:", gx2,
+          "gy2:", gy2,
+          "gz2:", gz2)
 
     csv_writer.writerow([
         t,
-        Roll1, Pitch1, Yaw1,
-        gx, gy, gz,
-        Roll2, Pitch2, Yaw2,
-        ax, ay, az
+        ax1, ay1, az1,
+        gx1, gy1, gz1,
+        ax2, ay2, az2,
+        gx2, gy2, gz2
     ])
 
 

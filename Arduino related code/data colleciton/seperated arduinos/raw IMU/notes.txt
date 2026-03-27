@@ -1,0 +1,4 @@
+-For the python script to work make sure to use python 3.11.
+-Before running make sure to run "pip install bleak matplotlib numpy" to install the relevant dependencies.
+-To exit the python program press ctrl + c otherwise the csv file won't save
+-the debugging code contains all the serial calls and is used for debugging (Do not use for testing as it will not work when not connected to a computer)

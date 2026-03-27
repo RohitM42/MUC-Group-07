@@ -4,8 +4,6 @@
 
 Madgwick filter;
 
-const int ledPin = 13;
-
 const char* ankleName = "IMU_Ankle";
 const char* ankleUUID = "19B10031-E8F2-537E-4F6C-D104768A1214";
 
@@ -22,20 +20,6 @@ BLECharacteristic footChar(
 float ankleData[6];
 float outPacket[5];
 
-void LongBlink(){
-  digitalWrite(ledPin, HIGH);
-  delay(1000);                
-  digitalWrite(ledPin, LOW);  
-  delay(1000);
-}
-
-void ShortBlink(){
-  digitalWrite(ledPin, HIGH);
-  delay(200);                
-  digitalWrite(ledPin, LOW);  
-  delay(200);
-}
-
 float footAngleModel(
   float gx,float gy,float gz,
   float rollA,float yawA,
@@ -45,27 +29,12 @@ float footAngleModel(
 }
 
 void setup() {
-  pinMode(ledPin,OUTPUT);
 
-  if (!BLE.begin()) {
-    while (1){
-      LongBlink();
-      LongBlink();
-      ShortBlink();
-      ShortBlink();
-      delay(1000);                
-    }
-  }
+  Serial.begin(115200);
+  while(!Serial);
 
-  if (!IMU.begin()) {
-    while (1){
-      LongBlink();
-      LongBlink();
-      LongBlink();
-      ShortBlink();
-      delay(1000);                
-    }
-  }
+  IMU.begin();
+  BLE.begin();
 
   filter.begin(200);
 
@@ -78,6 +47,7 @@ void setup() {
   BLE.advertise();
   BLE.scan();
 
+  Serial.println("Foot scanning");
 }
 
 void loop() {
@@ -89,6 +59,8 @@ void loop() {
     BLE.stopScan();
 
     if (peripheral.connect()) {
+
+      Serial.println("Connected to ankle");
 
       if (peripheral.discoverAttributes()) {
 
@@ -122,6 +94,7 @@ void loop() {
 
 			if(footChar.subscribed()){
 				footChar.writeValue((byte*)outPacket,20);
+				Serial.println("Forwarded result to Python");
 			}
           }
 
