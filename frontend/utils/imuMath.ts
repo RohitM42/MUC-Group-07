@@ -23,25 +23,35 @@ export interface DerivedMetrics {
 export function unpackIMU(data: number[], timestamp: number): RawIMU {
   console.log('[IMU] raw bytes length:', data.length, 'bytes:', JSON.stringify(data));
 
-  if (data.length < 20) {
-    console.warn('[IMU] packet too short — expected 20 bytes, got', data.length);
-    return { footAngle: 0, walking: false, ax: 0, ay: 0, az: 0, timestamp };
-  }
-
   const buf = new DataView(new Uint8Array(data).buffer);
 
-  const footAngle = buf.getFloat32(0,  true);
-  const walkingRaw = buf.getFloat32(4,  true);
-  const ax        = buf.getFloat32(8,  true);
-  const ay        = buf.getFloat32(12, true);
-  const az        = buf.getFloat32(16, true);
+  // 24-byte ankle packet: [walking, ax, ay, az, roll, yaw]
+  if (data.length >= 24) {
+    const walkingRaw = buf.getFloat32(0,  true);
+    const ax         = buf.getFloat32(4,  true);
+    const ay         = buf.getFloat32(8,  true);
+    const az         = buf.getFloat32(12, true);
+    const walking    = walkingRaw >= 0.5;
+    console.log('[IMU] ankle packet — walking:', walking);
+    console.log('[IMU] ACC:', ax, ay, az);
+    return { footAngle: 0, walking, ax, ay, az, timestamp };
+  }
 
-  const walking = walkingRaw >= 0.5;
+  // 20-byte foot packet: [footAngle, walking, ax, ay, az]
+  if (data.length >= 20) {
+    const footAngle  = buf.getFloat32(0,  true);
+    const walkingRaw = buf.getFloat32(4,  true);
+    const ax         = buf.getFloat32(8,  true);
+    const ay         = buf.getFloat32(12, true);
+    const az         = buf.getFloat32(16, true);
+    const walking    = walkingRaw >= 0.5;
+    console.log('[IMU] foot packet — footAngle:', footAngle, 'walking:', walking);
+    console.log('[IMU] ACC:', ax, ay, az);
+    return { footAngle, walking, ax, ay, az, timestamp };
+  }
 
-  console.log('[IMU] footAngle:', footAngle, 'walking:', walking);
-  console.log('[IMU] ACC:', ax, ay, az);
-
-  return { footAngle, walking, ax, ay, az, timestamp };
+  console.warn('[IMU] packet too short — expected 20 or 24 bytes, got', data.length);
+  return { footAngle: 0, walking: false, ax: 0, ay: 0, az: 0, timestamp };
 }
 
 // Derived metrics --------------------------------------------------------------
