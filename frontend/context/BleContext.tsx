@@ -123,15 +123,12 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     // BLE event listeners -------------------------------------------------------
 
     const onDiscover = BleManager.onDiscoverPeripheral((peripheral) => {
-      if (!peripheral.name) return;
+      const { id, name, rssi } = peripheral;
+      if (!name) return;
       setDevices(prev => {
-        if (prev.some(d => d.id === peripheral.id)) return prev;
-        console.log('Discovered device:', peripheral.id, peripheral.name);
-        return [...prev, {
-          id:   peripheral.id,
-          name: peripheral.name,
-          rssi: peripheral.rssi,
-        }];
+        if (prev.some(d => d.id === id)) return prev;
+        console.log('Discovered device:', id, name);
+        return [...prev, { id, name, rssi }];
       });
     });
 
@@ -155,8 +152,8 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       console.log('Received IMU data:', imu);
       const metrics = deriveMetrics(imu);
 
-      // Step detection runs on every sample
-      const isStep = detectStep(metrics.totalAccel, timestamp);
+      // Step detection only runs when the TinyML classifier says walking
+      const isStep = imu.walking && detectStep(metrics.totalAccel, timestamp);
       if (isStep) {
         setStepCount(prev => prev + 1);
         setPace(updatePace(timestamp));
