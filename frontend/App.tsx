@@ -9,7 +9,6 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 
 import DashboardScreen from './screens/DashboardScreen';
 import ConnectScreen   from './screens/ConnectScreen';
-import LiveScreen      from './screens/LiveScreen';
 import HistoryScreen   from './screens/HistoryScreen';
 import SettingsScreen  from './screens/SettingsScreen';
 
@@ -18,7 +17,6 @@ import SettingsScreen  from './screens/SettingsScreen';
 export type RootTabParamList = {
   Dashboard: undefined;
   Connect:   undefined;
-  Live:      undefined;
   History:   undefined;
   Settings:  undefined;
 };
@@ -28,7 +26,6 @@ const Tab = createBottomTabNavigator<RootTabParamList>();
 const TAB_ICONS: Record<string, string> = {
   Dashboard: '⊞',
   Connect:   '⊙',
-  Live:      '◈',
   History:   '≡',
   Settings:  '⚙',
 };
@@ -80,11 +77,6 @@ function AppInner() {
       >
         <Tab.Screen name="Dashboard" component={DashboardScreen} />
         <Tab.Screen name="Connect"   component={ConnectScreen}   />
-        <Tab.Screen
-          name="Live"
-          component={LiveScreen}
-          options={{ title: 'Live Tracking' }}
-        />
         <Tab.Screen name="History"  component={HistoryScreen}  />
         <Tab.Screen name="Settings" component={SettingsScreen} />
       </Tab.Navigator>
