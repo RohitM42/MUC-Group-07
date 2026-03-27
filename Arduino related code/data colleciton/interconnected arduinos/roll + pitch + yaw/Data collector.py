@@ -7,7 +7,7 @@ import os
 from bleak import BleakScanner, BleakClient
 
 #the device name and uuid are dependent on the code on the arduino and may need to be changed
-DEVICE_NAME = "IMU_Master1"
+DEVICE_NAME = "IMU_Master"
 CHAR_UUID = "19B10021-E8F2-537E-4F6C-D104768A1214"
 start_time = None
 
