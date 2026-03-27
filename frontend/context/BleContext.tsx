@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import BleManager from 'react-native-ble-manager';
-import { SERVICE_UUID, CHAR_UUID, DEVICE_NAME } from '../constants/ble';
+import { KNOWN_DEVICES, FOOT_DEVICE, DeviceConfig } from '../constants/ble';
 import {
   unpackIMU,
   deriveMetrics,
@@ -59,7 +59,7 @@ interface BleContextValue {
 
   // Actions
   startScan: () => Promise<void>;
-  connect: (deviceId: string) => Promise<void>;
+  connect: (deviceId: string, deviceName: string) => Promise<void>;
   disconnect: () => Promise<void>;
 }
 
@@ -90,6 +90,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const [isRecording, setIsRecording] = useState(false);
 
   const connectionStartTime = useRef<number>(0);
+  const activeConfig        = useRef<DeviceConfig>(FOOT_DEVICE);
 
   // Recording counters — only accumulate while isRecording is true
   const sessionStartTime  = useRef<number>(0);
@@ -228,11 +229,25 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const connect = useCallback(async (deviceId: string) => {
+  const connect = useCallback(async (deviceId: string, deviceName: string) => {
     setConnectionStatus('Connecting...');
     try {
       await BleManager.connect(deviceId);
-      await BleManager.retrieveServices(deviceId);
+      const peripheralInfo = await BleManager.retrieveServices(deviceId);
+
+      // Match config by the service UUIDs the device actually advertises,
+      // falling back to name match, then foot as default
+      const config =
+        KNOWN_DEVICES.find(d =>
+          peripheralInfo.serviceUUIDs?.some(
+            uuid => uuid.toLowerCase() === d.serviceUUID.toLowerCase()
+          )
+        ) ??
+        KNOWN_DEVICES.find(d => d.name === deviceName) ??
+        FOOT_DEVICE;
+
+      activeConfig.current = config;
+
       if (Platform.OS === 'android') {
         const negotiatedMTU = await BleManager.requestMTU(deviceId, 64);
         console.log('[BLE] Negotiated MTU:', negotiatedMTU);
@@ -244,13 +259,13 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       setStepCount(0);
       setPace(0);
 
-      await BleManager.startNotification(deviceId, SERVICE_UUID, CHAR_UUID);
+      await BleManager.startNotification(deviceId, config.serviceUUID, config.charUUID);
 
       console.log('[BLE] Connected to device:', deviceId);
-      console.log('[BLE] Notifications started on', SERVICE_UUID, '/', CHAR_UUID);
+      console.log('[BLE] Notifications started on', config.serviceUUID, '/', config.charUUID);
 
       setConnectedDeviceId(deviceId);
-      setConnectionStatus(`Connected to ${DEVICE_NAME}`);
+      setConnectionStatus(`Connected to ${config.name}`);
     } catch (e: any) {
       console.error('Connect error:', e);
       setConnectionStatus(`Failed: ${e?.message ?? 'unknown error'}`);
@@ -292,8 +307,9 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
 
   const disconnect = useCallback(async () => {
     if (!connectedDeviceId) return;
+    const { serviceUUID, charUUID } = activeConfig.current;
     try {
-      await BleManager.stopNotification(connectedDeviceId, SERVICE_UUID, CHAR_UUID);
+      await BleManager.stopNotification(connectedDeviceId, serviceUUID, charUUID);
       await BleManager.disconnect(connectedDeviceId);
     } catch (e) {
       console.error('Disconnect error:', e);
