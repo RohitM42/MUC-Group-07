@@ -233,20 +233,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     setConnectionStatus('Connecting...');
     try {
       await BleManager.connect(deviceId);
-      const peripheralInfo = await BleManager.retrieveServices(deviceId);
-
-      // Match config by the service UUIDs the device actually advertises,
-      // falling back to name match, then foot as default
-      const config =
-        KNOWN_DEVICES.find(d =>
-          peripheralInfo.serviceUUIDs?.some(
-            uuid => uuid.toLowerCase() === d.serviceUUID.toLowerCase()
-          )
-        ) ??
-        KNOWN_DEVICES.find(d => d.name === deviceName) ??
-        FOOT_DEVICE;
-
-      activeConfig.current = config;
+      await BleManager.retrieveServices(deviceId);
 
       if (Platform.OS === 'android') {
         const negotiatedMTU = await BleManager.requestMTU(deviceId, 64);
@@ -259,7 +246,23 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       setStepCount(0);
       setPace(0);
 
-      await BleManager.startNotification(deviceId, config.serviceUUID, config.charUUID);
+      // Try each known device config until one succeeds
+      let matchedConfig = FOOT_DEVICE;
+      let notificationStarted = false;
+      for (const candidate of KNOWN_DEVICES) {
+        try {
+          await BleManager.startNotification(deviceId, candidate.serviceUUID, candidate.charUUID);
+          matchedConfig = candidate;
+          notificationStarted = true;
+          break;
+        } catch {
+          // try next
+        }
+      }
+      if (!notificationStarted) {
+        throw new Error('No matching service UUID found on device');
+      }
+      activeConfig.current = matchedConfig;
 
       console.log('[BLE] Connected to device:', deviceId);
       console.log('[BLE] Notifications started on', config.serviceUUID, '/', config.charUUID);
