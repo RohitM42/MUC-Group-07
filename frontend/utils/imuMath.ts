@@ -58,12 +58,16 @@ export function unpackIMU(data: number[], timestamp: number): RawIMU {
 
 const RAD_TO_DEG = 180 / Math.PI;
 
+// Offset to compensate for the ankle sensor being mounted upright/outward rather than flat.
+// Adjust until standing normally reads ~0°. Increase if reading negative, decrease if positive.
+const ROLL_MOUNT_OFFSET = 75;
+
 export function deriveMetrics(imu: RawIMU): DerivedMetrics {
   const { ax, ay, az } = imu;
 
   const totalAccel = Math.sqrt(ax * ax + ay * ay + az * az);
   const pitch      = Math.atan2(ay, Math.sqrt(ax * ax + az * az)) * RAD_TO_DEG;
-  const roll       = Math.atan2(ax, Math.sqrt(ay * ay + az * az)) * RAD_TO_DEG;
+  const roll       = Math.atan2(ax, Math.sqrt(ay * ay + az * az)) * RAD_TO_DEG + ROLL_MOUNT_OFFSET;
 
   return { totalAccel, pitch, roll };
 }

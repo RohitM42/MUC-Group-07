@@ -36,12 +36,12 @@ void ShortBlink(){
   delay(200);
 }
 
-float footAngleModel(
-  float gx,float gy,float gz,
-  float rollA,float yawA,
-  float rollF, float yawF)
+// Foot angle: yaw difference between ankle and foot sensors (degrees).
+// Positive = foot turned outward relative to ankle, negative = inward.
+// This is the direct geometric equivalent of what angle_linear_regression.pkl was trained to predict.
+float computeFootAngle(float ankleYaw, float footYaw)
 {
-  return rollA * 0.5 + yawA * 0.3 + gx * 0.2;
+  return ankleYaw - footYaw;
 }
 
 void setup() {
@@ -111,8 +111,7 @@ void loop() {
 
             filter.updateIMU(gx,gy,gz,ax,ay,az);
 
-            float footAngle =
-              footAngleModel(ax,ay,az,ankleData[4],ankleData[5],filter.getRoll(),filter.getYaw());
+            float footAngle = computeFootAngle(ankleData[5], filter.getYaw());
 
             outPacket[0] = footAngle;
             outPacket[1] = ankleData[0];
