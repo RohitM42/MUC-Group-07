@@ -90,8 +90,9 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const [isRecording, setIsRecording] = useState(false);
   const isRecordingRef = useRef(false);
 
-  const connectionStartTime = useRef<number>(0);
-  const activeConfig        = useRef<DeviceConfig>(FOOT_DEVICE);
+  const connectionStartTime   = useRef<number>(0);
+  const activeConfig          = useRef<DeviceConfig>(FOOT_DEVICE);
+  const connectedDeviceIdRef  = useRef<string | null>(null);
 
   // Recording counters — only accumulate while isRecording is true
   const sessionStartTime  = useRef<number>(0);
@@ -106,8 +107,9 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
 
   const isConnected = connectedDeviceId !== null;
 
-  // Keep ref in sync so the BLE listener always sees the current value
+  // Keep refs in sync so BLE listeners always see current values without re-registering
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+  useEffect(() => { connectedDeviceIdRef.current = connectedDeviceId; }, [connectedDeviceId]);
 
   // Initialise BLE on mount ----------------------------------------------------
 
@@ -120,7 +122,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         ]);
       }
-      await BleManager.start({ showAlert: false });
+      await BleManager.start({ showAlert: false, restoreIdentifier: 'muc-group07-ble' });
     };
 
     init();
@@ -138,12 +140,13 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     });
 
     const onDisconnect = BleManager.onDisconnectPeripheral((data) => {
-      if (data.peripheral === connectedDeviceId) {
+      if (data.peripheral === connectedDeviceIdRef.current) {
         setConnectedDeviceId(null);
         setConnectionStatus('Disconnected');
         setRawIMU(null);
         setDerived(null);
         setWalking(false);
+        setDevices([]);
         isRecordingRef.current = false;
         setIsRecording(false);
       }
@@ -187,7 +190,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       onDisconnect.remove();
       onValueUpdate.remove();
     };
-  }, [connectedDeviceId]);
+  }, []);
 
   // Actions -------------------------------------------------------------------
 
@@ -243,7 +246,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
           setTimeout(() => reject(new Error('Connection timed out')), 10000)
         ),
       ]);
-      await BleManager.retrieveServices(deviceId);
+      await BleManager.retrieveServices(deviceId, KNOWN_DEVICES.map(d => d.serviceUUID));
 
       if (Platform.OS === 'android') {
         const negotiatedMTU = await BleManager.requestMTU(deviceId, 64);
@@ -335,6 +338,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     setRawIMU(null);
     setDerived(null);
     setWalking(false);
+    setDevices([]);
   }, [connectedDeviceId]);
 
   // ---------------------------------------------------------------------------
