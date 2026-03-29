@@ -54,6 +54,7 @@ interface BleContextValue {
 
   // Recording
   isRecording: boolean;
+  elapsedSeconds: number;
   startSession: () => void;
   stopSession: () => Promise<void>;
 
@@ -88,6 +89,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const [pace, setPace]                         = useState(0);
 
   const [isRecording, setIsRecording] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const isRecordingRef = useRef(false);
 
   const connectionStartTime   = useRef<number>(0);
@@ -110,6 +112,15 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   // Keep refs in sync so BLE listeners always see current values without re-registering
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
   useEffect(() => { connectedDeviceIdRef.current = connectedDeviceId; }, [connectedDeviceId]);
+
+  // Session timer — ticks every second while recording
+  useEffect(() => {
+    if (!isRecording) return;
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - sessionStartTime.current) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isRecording]);
 
   // Initialise BLE on mount ----------------------------------------------------
 
@@ -292,14 +303,17 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
 
   const startSession = useCallback(() => {
     sessionStartTime.current  = Date.now();
-    stepCountAtStart.current  = stepCount;
+    stepCountAtStart.current  = 0;
     totalReadings.current     = 0;
     correctReadings.current   = 0;
     walkingReadings.current   = 0;
     footAngleSum.current      = 0;
+    setStepCount(0);
+    setPace(0);
+    setElapsedSeconds(0);
     isRecordingRef.current = true;
     setIsRecording(true);
-  }, [stepCount]);
+  }, []);
 
   const stopSession = useCallback(async () => {
     if (!isRecordingRef.current) return;
@@ -349,7 +363,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       rawIMU, derived,
       walking,
       stepCount, pace,
-      isRecording, startSession, stopSession,
+      isRecording, elapsedSeconds, startSession, stopSession,
       startScan, connect, disconnect,
     }}>
       {children}

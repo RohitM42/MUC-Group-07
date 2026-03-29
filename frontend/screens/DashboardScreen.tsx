@@ -56,12 +56,20 @@ export default function DashboardScreen() {
   const navigation      = useNavigation<NavProp>();
   const { colours }     = useTheme();
   const s               = makeStyles(colours);
-  const { isConnected, connectionStatus, stepCount, pace, derived, rawIMU, walking, isRecording, startSession, stopSession } = useBle();
+  const { isConnected, connectionStatus, stepCount, pace, derived, rawIMU, walking, isRecording, elapsedSeconds, startSession, stopSession } = useBle();
 
   const roll        = derived ? derived.roll.toFixed(1) : '—';
   const correctness = derived ? getRollCorrectness(derived.roll) : null;
   const paceDisplay = pace > 0 ? pace.toFixed(0) : '—';
   const stepDisplay = stepCount > 0 ? stepCount : '—';
+
+  const distanceM       = stepCount * 0.75;
+  const distanceDisplay = distanceM >= 1000 ? (distanceM / 1000).toFixed(2) : distanceM.toFixed(0);
+  const distanceUnit    = distanceM >= 1000 ? 'km' : 'm';
+
+  const timerMins = Math.floor(elapsedSeconds / 60).toString().padStart(2, '0');
+  const timerSecs = (elapsedSeconds % 60).toString().padStart(2, '0');
+  const timerDisplay = `${timerMins}:${timerSecs}`;
 
   const correctnessColor =
     correctness === 'correct'   ? colours.accent   :
@@ -112,9 +120,24 @@ export default function DashboardScreen() {
         <MetricCard label="Steps"      value={stepDisplay}                                                             colours={colours} />
         <MetricCard label="Pace"       value={paceDisplay}  unit="spm"                                                 colours={colours} />
         <MetricCard label="Roll Angle" value={roll}         unit="°"   accent={derived ? correctnessColor : undefined} colours={colours} />
-        <MetricCard label="Foot Angle"  value={rawIMU ? rawIMU.footAngle.toFixed(1) : '—'} unit="°"                     colours={colours} />
-        <MetricCard label="Acceleration"       value={derived ? derived.totalAccel.toFixed(2) : '—'} unit="g"                 colours={colours} />
+        <MetricCard label="Foot Angle" value={rawIMU ? rawIMU.footAngle.toFixed(1) : '—'} unit="°"                    colours={colours} />
+        <MetricCard label="Distance"   value={distanceDisplay} unit={distanceUnit}                                     colours={colours} />
       </View>
+
+      {/* Session timer ------------------------------------------------------- */}
+      {isConnected && (
+        <View style={[s.timerBanner, { borderLeftColor: isRecording ? colours.accent : colours.border }]}>
+          <View>
+            <Text style={s.eyebrow}>Session Timer</Text>
+            <Text style={[s.timerValue, { color: isRecording ? colours.text : colours.textDim }]}>
+              {timerDisplay}
+            </Text>
+          </View>
+          {!isRecording && (
+            <Text style={s.timerHint}>Start session to record data and begin timer</Text>
+          )}
+        </View>
+      )}
 
       {/* Session recording button -------------------------------------------- */}
       {isConnected && (
@@ -229,6 +252,18 @@ function makeStyles(c: ColourPalette) {
     cardValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
     cardValue:    { color: c.text, fontSize: 26, fontWeight: '700' },
     cardUnit:     { color: c.textSub, fontSize: 13 },
+
+    timerBanner: {
+      backgroundColor: c.surface,
+      borderLeftWidth: 4,
+      borderRadius: 10,
+      padding: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    timerValue: { fontSize: 28, fontWeight: '700', letterSpacing: 1 },
+    timerHint:  { color: c.textDim, fontSize: 12, flex: 1, textAlign: 'right', paddingLeft: 12 },
 
     sessionButton: {
       borderRadius: 10,
