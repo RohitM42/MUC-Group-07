@@ -237,7 +237,12 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const connect = useCallback(async (deviceId: string, deviceName: string) => {
     setConnectionStatus('Connecting...');
     try {
-      await BleManager.connect(deviceId);
+      await Promise.race([
+        BleManager.connect(deviceId),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('Connection timed out')), 10000)
+        ),
+      ]);
       await BleManager.retrieveServices(deviceId);
 
       if (Platform.OS === 'android') {
@@ -246,6 +251,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       }
 
       connectionStartTime.current = Date.now();
+      lastUIUpdate.current = 0;
       resetStepDetector();
       resetPace();
       setStepCount(0);
