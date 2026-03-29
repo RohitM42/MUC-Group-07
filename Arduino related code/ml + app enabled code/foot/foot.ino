@@ -21,6 +21,8 @@ BLECharacteristic footChar(
 
 float ankleData[6];
 float outPacket[5];
+bool wasAppSubscribed = false;
+bool scanningForAnkle = false;
 
 void LongBlink(){
   digitalWrite(ledPin, HIGH);
@@ -36,12 +38,49 @@ void ShortBlink(){
   delay(200);
 }
 
-// Foot angle: yaw difference between ankle and foot sensors (degrees).
-// Positive = foot turned outward relative to ankle, negative = inward.
-// This is the direct geometric equivalent of what angle_linear_regression.pkl was trained to predict.
+float wrapAngleDegrees(float angle)
+{
+  while (angle > 180.0f) angle -= 360.0f;
+  while (angle < -180.0f) angle += 360.0f;
+  return angle;
+}
+
+// Foot angle: foot yaw relative to ankle yaw (degrees).
+// This matches the training-side convention: Yaw1 - Yaw2.
 float computeFootAngle(float ankleYaw, float footYaw)
 {
-  return ankleYaw - footYaw;
+  return wrapAngleDegrees(footYaw - ankleYaw);
+}
+
+void ensurePhoneAdvertising()
+{
+  bool appSubscribed = footChar.subscribed();
+
+  if (wasAppSubscribed && !appSubscribed) {
+    BLE.advertise();
+  }
+
+  if (!appSubscribed) {
+    BLE.advertise();
+  }
+
+  wasAppSubscribed = appSubscribed;
+}
+
+void startAnkleScan()
+{
+  if (!scanningForAnkle) {
+    BLE.scan();
+    scanningForAnkle = true;
+  }
+}
+
+void stopAnkleScan()
+{
+  if (scanningForAnkle) {
+    BLE.stopScan();
+    scanningForAnkle = false;
+  }
 }
 
 void setup() {
@@ -67,7 +106,8 @@ void setup() {
     }
   }
 
-  filter.begin(200);
+  // We publish roughly every 50 ms, so keep the filter rate close to 20 Hz.
+  filter.begin(20);
 
   BLE.setLocalName("IMU_Foot");
   BLE.setAdvertisedService(footService);
@@ -76,17 +116,28 @@ void setup() {
   BLE.addService(footService);
 
   BLE.advertise();
-  BLE.scan();
 
 }
 
 void loop() {
+  ensurePhoneAdvertising();
+
+  // Stay discoverable to the phone while idle. Only chase the ankle once the app
+  // is actually connected/subscribed, otherwise IMU_Foot can disappear from scans.
+  if (!footChar.subscribed()) {
+    stopAnkleScan();
+    BLE.poll();
+    delay(50);
+    return;
+  }
+
+  startAnkleScan();
 
   BLEDevice peripheral = BLE.available();
 
   if (peripheral && peripheral.localName() == ankleName) {
 
-    BLE.stopScan();
+    stopAnkleScan();
 
     if (peripheral.connect()) {
 
@@ -97,7 +148,8 @@ void loop() {
 
         ankleChar.subscribe();
 
-        while (peripheral.connected()) {
+        while (peripheral.connected() && footChar.subscribed()) {
+          ensurePhoneAdvertising();
 
           if (ankleChar.valueUpdated()) {
 
@@ -125,10 +177,17 @@ void loop() {
           }
 
           BLE.poll();
+          ensurePhoneAdvertising();
+        }
+
+        if (peripheral.connected() && !footChar.subscribed()) {
+          peripheral.disconnect();
         }
       }
 
-      BLE.scan();
+      startAnkleScan();
     }
   }
+
+  BLE.poll();
 }

@@ -15,18 +15,19 @@ export interface DerivedMetrics {
   roll:       number; // foot inward/outward lean (degrees) — key metric
 }
 
+export type PacketSource = 'foot' | 'ankle' | 'unknown';
+
 // Byte unpacking -------------------------------------------------------------------
 
-// Unpacks the 20-byte BLE notification from foot.ino into 5 floats.
-// Layout: [footAngle, walking, ax, ay, az] — all little-endian float32
-
-export function unpackIMU(data: number[], timestamp: number): RawIMU {
-  console.log('[IMU] raw bytes length:', data.length, 'bytes:', JSON.stringify(data));
+// Unpacks the BLE notification from either Arduino.
+// foot packet:  [footAngle, walking, ax, ay, az]
+// ankle packet: [walking, ax, ay, az, roll, yaw]
+export function unpackIMU(data: number[], timestamp: number, source: PacketSource = 'unknown'): RawIMU {
+  console.log('[IMU] raw bytes length:', data.length, 'source:', source, 'bytes:', JSON.stringify(data));
 
   const buf = new DataView(new Uint8Array(data).buffer);
 
-  // 24-byte ankle packet: [walking, ax, ay, az, roll, yaw]
-  if (data.length >= 24) {
+  const unpackAnklePacket = (): RawIMU => {
     const walkingRaw = buf.getFloat32(0,  true);
     const ax         = buf.getFloat32(4,  true);
     const ay         = buf.getFloat32(8,  true);
@@ -35,10 +36,9 @@ export function unpackIMU(data: number[], timestamp: number): RawIMU {
     console.log('[IMU] ankle packet — walking:', walking);
     console.log('[IMU] ACC:', ax, ay, az);
     return { footAngle: 0, walking, ax, ay, az, timestamp };
-  }
+  };
 
-  // 20-byte foot packet: [footAngle, walking, ax, ay, az]
-  if (data.length >= 20) {
+  const unpackFootPacket = (): RawIMU => {
     const footAngle  = buf.getFloat32(0,  true);
     const walkingRaw = buf.getFloat32(4,  true);
     const ax         = buf.getFloat32(8,  true);
@@ -48,6 +48,32 @@ export function unpackIMU(data: number[], timestamp: number): RawIMU {
     console.log('[IMU] foot packet — footAngle:', footAngle, 'walking:', walking);
     console.log('[IMU] ACC:', ax, ay, az);
     return { footAngle, walking, ax, ay, az, timestamp };
+  };
+
+  if (source === 'foot') {
+    if (data.length < 20) {
+      console.warn('[IMU] foot packet too short — expected 20 bytes, got', data.length);
+      return { footAngle: 0, walking: false, ax: 0, ay: 0, az: 0, timestamp };
+    }
+    return unpackFootPacket();
+  }
+
+  if (source === 'ankle') {
+    if (data.length < 16) {
+      console.warn('[IMU] ankle packet too short — expected at least 16 bytes, got', data.length);
+      return { footAngle: 0, walking: false, ax: 0, ay: 0, az: 0, timestamp };
+    }
+    return unpackAnklePacket();
+  }
+
+  // 24-byte ankle packet: [walking, ax, ay, az, roll, yaw]
+  if (data.length >= 24) {
+    return unpackAnklePacket();
+  }
+
+  // 20-byte foot packet: [footAngle, walking, ax, ay, az]
+  if (data.length >= 20) {
+    return unpackFootPacket();
   }
 
   console.warn('[IMU] packet too short — expected 20 or 24 bytes, got', data.length);
@@ -74,18 +100,29 @@ export function deriveMetrics(imu: RawIMU): DerivedMetrics {
 
 // Orientation correctness --------------------------------------------------------------
 
+export function normalizeAngleDegrees(angle: number): number {
+  let normalized = angle;
+  while (normalized > 180) normalized -= 360;
+  while (normalized < -180) normalized += 360;
+  return normalized;
+}
+
 // Thresholds in degrees — adjust once calibration data is available
-export const ROLL_WARN_THRESHOLD  = 10; // amber: ±10°
-export const ROLL_ERROR_THRESHOLD = 20; // red:   ±20°
+export const ANGLE_WARN_THRESHOLD  = 10; // amber: ±10°
+export const ANGLE_ERROR_THRESHOLD = 20; // red:   ±20°
+export const ROLL_WARN_THRESHOLD   = ANGLE_WARN_THRESHOLD;
+export const ROLL_ERROR_THRESHOLD  = ANGLE_ERROR_THRESHOLD;
 
 export type CorrectnessLevel = 'correct' | 'warn' | 'incorrect';
 
-export function getRollCorrectness(roll: number): CorrectnessLevel {
-  const abs = Math.abs(roll);
-  if (abs <= ROLL_WARN_THRESHOLD)  return 'correct';
-  if (abs <= ROLL_ERROR_THRESHOLD) return 'warn';
+export function getAngleCorrectness(angle: number): CorrectnessLevel {
+  const abs = Math.abs(angle);
+  if (abs <= ANGLE_WARN_THRESHOLD)  return 'correct';
+  if (abs <= ANGLE_ERROR_THRESHOLD) return 'warn';
   return 'incorrect';
 }
+
+export const getRollCorrectness = getAngleCorrectness;
 
 export const CORRECTNESS_COLOUR: Record<CorrectnessLevel, string> = {
   correct:   '#22c55e', // green
