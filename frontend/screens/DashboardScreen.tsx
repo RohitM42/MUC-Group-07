@@ -147,7 +147,7 @@ export default function DashboardScreen() {
       <View style={s.grid}>
         <MetricCard label="Steps"      value={stepDisplay}                                                             colours={colours} />
         <MetricCard label="Pace"       value={paceDisplay}  unit="spm"                                                 colours={colours} />
-        <MetricCard label="Roll Angle" value={roll}         unit="°"   accent={isCalibrated ? correctnessColor : undefined} colours={colours} />
+        <MetricCard label="Roll Angle" value={roll}         unit="°"                                                        colours={colours} />
         <MetricCard label="Foot Angle" value={footAngle}    unit="°"                                                    colours={colours} />
         <MetricCard label="Distance"   value={distanceDisplay} unit={distanceUnit}                                     colours={colours} />
       </View>

@@ -24,6 +24,10 @@ float outPacket[5];
 bool wasAppSubscribed = false;
 bool scanningForAnkle = false;
 
+// IMU sampling runs independently at 100 Hz regardless of ankle BLE notifications
+unsigned long lastIMUUpdate = 0;
+const unsigned long IMU_INTERVAL_MS = 10;
+
 void LongBlink(){
   digitalWrite(ledPin, HIGH);
   delay(1000);                
@@ -106,8 +110,8 @@ void setup() {
     }
   }
 
-  // We publish roughly every 50 ms, so keep the filter rate close to 20 Hz.
-  filter.begin(20);
+  // Filter runs at 100 Hz independently of the ankle BLE notification rate.
+  filter.begin(100);
 
   BLE.setLocalName("IMU_Foot");
   BLE.setAdvertisedService(footService);
@@ -151,19 +155,22 @@ void loop() {
         while (peripheral.connected() && footChar.subscribed()) {
           ensurePhoneAdvertising();
 
-          if (ankleChar.valueUpdated()) {
-
-            ankleChar.readValue((byte*)ankleData,24);
-
+          // Sample foot IMU and update filter at 100 Hz, independent of ankle notifications.
+          unsigned long now = millis();
+          if (now - lastIMUUpdate >= IMU_INTERVAL_MS) {
+            lastIMUUpdate = now;
             float ax,ay,az;
             float gx,gy,gz;
-
             float mx,my,mz;
             IMU.readAcceleration(ax,ay,az);
             IMU.readGyroscope(gx,gy,gz);
             IMU.readMagneticField(mx,my,mz);
-
             filter.update(gx,gy,gz,ax,ay,az,mx,my,mz);
+          }
+
+          // Send a packet to the phone whenever the ankle sends fresh data.
+          if (ankleChar.valueUpdated()) {
+            ankleChar.readValue((byte*)ankleData,24);
 
             float footAngle = computeFootAngle(ankleData[5], filter.getYaw());
 
