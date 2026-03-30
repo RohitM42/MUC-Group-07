@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import BleManager from 'react-native-ble-manager';
-import { KNOWN_DEVICES, FOOT_DEVICE, DeviceConfig } from '../constants/ble';
+import { FOOT_DEVICE, ANKLE_DEVICE, DeviceConfig } from '../constants/ble';
 import {
   unpackIMU,
   deriveMetrics,
@@ -21,7 +21,8 @@ import {
   resetPace,
   RawIMU,
   DerivedMetrics,
-  ROLL_WARN_THRESHOLD,
+  ANGLE_WARN_THRESHOLD,
+  normalizeAngleDegrees,
 } from '../utils/imuMath';
 import { saveSession } from '../utils/sessionStore';
 
@@ -44,6 +45,9 @@ interface BleContextValue {
   // Live data
   rawIMU: RawIMU | null;
   derived: DerivedMetrics | null;
+  calibratedFootAngle: number | null;
+  isCalibrating: boolean;
+  isCalibrated: boolean;
 
   // Classification (from Arduino TinyML)
   walking: boolean;
@@ -84,6 +88,9 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
   const [rawIMU, setRawIMU]                     = useState<RawIMU | null>(null);
   const [derived, setDerived]                   = useState<DerivedMetrics | null>(null);
+  const [calibratedFootAngle, setCalibratedFootAngle] = useState<number | null>(null);
+  const [isCalibrating, setIsCalibrating]             = useState(false);
+  const [isCalibrated, setIsCalibrated]               = useState(false);
   const [walking, setWalking]                   = useState(false);
   const [stepCount, setStepCount]               = useState(0);
   const [pace, setPace]                         = useState(0);
@@ -91,10 +98,13 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const [isRecording, setIsRecording] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const isRecordingRef = useRef(false);
+  const isCalibratingRef = useRef(false);
+  const isCalibratedRef = useRef(false);
 
   const connectionStartTime   = useRef<number>(0);
   const activeConfig          = useRef<DeviceConfig>(FOOT_DEVICE);
   const connectedDeviceIdRef  = useRef<string | null>(null);
+  const stepCountRef          = useRef(0);
 
   // Recording counters — only accumulate while isRecording is true
   const sessionStartTime  = useRef<number>(0);
@@ -103,15 +113,23 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const correctReadings   = useRef<number>(0);
   const walkingReadings   = useRef<number>(0);
   const footAngleSum      = useRef<number>(0);
+  const footAngleOffset   = useRef(0);
+  const calibrationStartTimestamp = useRef<number | null>(null);
+  const calibrationAngleSum       = useRef(0);
+  const calibrationSampleCount    = useRef(0);
 
   // Throttle: only push a UI update every 100ms (10Hz) regardless of 50Hz BLE stream
   const lastUIUpdate = useRef<number>(0);
+  const CALIBRATION_DURATION_MS = 2000;
 
   const isConnected = connectedDeviceId !== null;
 
   // Keep refs in sync so BLE listeners always see current values without re-registering
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+  useEffect(() => { isCalibratingRef.current = isCalibrating; }, [isCalibrating]);
+  useEffect(() => { isCalibratedRef.current = isCalibrated; }, [isCalibrated]);
   useEffect(() => { connectedDeviceIdRef.current = connectedDeviceId; }, [connectedDeviceId]);
+  useEffect(() => { stepCountRef.current = stepCount; }, [stepCount]);
 
   // Session timer — ticks every second while recording
   useEffect(() => {
@@ -156,9 +174,18 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         setConnectionStatus('Disconnected');
         setRawIMU(null);
         setDerived(null);
+        setCalibratedFootAngle(null);
+        setIsCalibrating(false);
+        setIsCalibrated(false);
         setWalking(false);
         setDevices([]);
         isRecordingRef.current = false;
+        isCalibratingRef.current = false;
+        isCalibratedRef.current = false;
+        footAngleOffset.current = 0;
+        calibrationStartTimestamp.current = null;
+        calibrationAngleSum.current = 0;
+        calibrationSampleCount.current = 0;
         setIsRecording(false);
       }
     });
@@ -168,9 +195,18 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
 
       // Parse regardless — needed for step detection
       const timestamp = now - connectionStartTime.current;
-      const imu = unpackIMU(data.value, timestamp);
+      const serviceUUID = data.service?.toLowerCase();
+      const packetSource =
+        serviceUUID === FOOT_DEVICE.serviceUUID.toLowerCase() ? 'foot' :
+        serviceUUID === ANKLE_DEVICE.serviceUUID.toLowerCase() ? 'ankle' :
+        'unknown';
+
+      const imu = unpackIMU(data.value, timestamp, packetSource);
       console.log('Received IMU data:', imu);
       const metrics = deriveMetrics(imu);
+      const currentCalibratedFootAngle = isCalibratedRef.current
+        ? normalizeAngleDegrees(imu.footAngle - footAngleOffset.current)
+        : null;
 
       // Step detection only runs when the TinyML classifier says walking
       const isStep = imu.walking && detectStep(metrics.totalAccel, timestamp);
@@ -179,12 +215,44 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         setPace(updatePace(timestamp));
       }
 
-      // Accumulate recording stats on every sample while a session is active
-      if (isRecordingRef.current) {
+      if (isRecordingRef.current && isCalibratingRef.current) {
+        if (calibrationStartTimestamp.current === null) {
+          calibrationStartTimestamp.current = timestamp;
+        }
+
+        calibrationAngleSum.current += imu.footAngle;
+        calibrationSampleCount.current += 1;
+
+        const calibrationElapsed = timestamp - calibrationStartTimestamp.current;
+        if (calibrationElapsed >= CALIBRATION_DURATION_MS && calibrationSampleCount.current > 0) {
+          footAngleOffset.current = calibrationAngleSum.current / calibrationSampleCount.current;
+          calibrationStartTimestamp.current = null;
+          calibrationAngleSum.current = 0;
+          calibrationSampleCount.current = 0;
+
+          isCalibratingRef.current = false;
+          isCalibratedRef.current = true;
+          setIsCalibrating(false);
+          setIsCalibrated(true);
+          setCalibratedFootAngle(0);
+
+          // Start actual stats only after the neutral stance calibration finishes.
+          sessionStartTime.current = Date.now();
+          stepCountAtStart.current = stepCountRef.current;
+          totalReadings.current = 0;
+          correctReadings.current = 0;
+          walkingReadings.current = 0;
+          footAngleSum.current = 0;
+          setElapsedSeconds(0);
+        }
+      }
+
+      // Accumulate recording stats only after calibration has completed.
+      if (isRecordingRef.current && currentCalibratedFootAngle !== null) {
         totalReadings.current++;
-        if (Math.abs(metrics.roll) <= ROLL_WARN_THRESHOLD) correctReadings.current++;
+        if (Math.abs(currentCalibratedFootAngle) <= ANGLE_WARN_THRESHOLD) correctReadings.current++;
         if (imu.walking) walkingReadings.current++;
-        footAngleSum.current += imu.footAngle;
+        footAngleSum.current += currentCalibratedFootAngle;
       }
 
       // Throttle UI renders to 10Hz
@@ -193,6 +261,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
 
       setRawIMU(imu);
       setDerived(metrics);
+      setCalibratedFootAngle(currentCalibratedFootAngle);
       setWalking(imu.walking);
     });
 
@@ -248,7 +317,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const connect = useCallback(async (deviceId: string, deviceName: string) => {
+  const connect = useCallback(async (deviceId: string, _deviceName: string) => {
     setConnectionStatus('Connecting...');
     try {
       await Promise.race([
@@ -257,7 +326,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
           setTimeout(() => reject(new Error('Connection timed out')), 10000)
         ),
       ]);
-      await BleManager.retrieveServices(deviceId, KNOWN_DEVICES.map(d => d.serviceUUID));
+      await BleManager.retrieveServices(deviceId, [FOOT_DEVICE.serviceUUID]);
 
       if (Platform.OS === 'android') {
         const negotiatedMTU = await BleManager.requestMTU(deviceId, 64);
@@ -271,29 +340,14 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       setStepCount(0);
       setPace(0);
 
-      // Try each known device config until one succeeds
-      let matchedConfig = FOOT_DEVICE;
-      let notificationStarted = false;
-      for (const candidate of KNOWN_DEVICES) {
-        try {
-          await BleManager.startNotification(deviceId, candidate.serviceUUID, candidate.charUUID);
-          matchedConfig = candidate;
-          notificationStarted = true;
-          break;
-        } catch {
-          // try next
-        }
-      }
-      if (!notificationStarted) {
-        throw new Error('No matching service UUID found on device');
-      }
-      activeConfig.current = matchedConfig;
+      await BleManager.startNotification(deviceId, FOOT_DEVICE.serviceUUID, FOOT_DEVICE.charUUID);
+      activeConfig.current = FOOT_DEVICE;
 
       console.log('[BLE] Connected to device:', deviceId);
-      console.log('[BLE] Notifications started on', matchedConfig.serviceUUID, '/', matchedConfig.charUUID);
+      console.log('[BLE] Notifications started on', FOOT_DEVICE.serviceUUID, '/', FOOT_DEVICE.charUUID);
 
       setConnectedDeviceId(deviceId);
-      setConnectionStatus(`Connected to ${matchedConfig.name}`);
+      setConnectionStatus(`Connected to ${FOOT_DEVICE.name}`);
     } catch (e: any) {
       console.error('Connect error:', e);
       setConnectionStatus(`Failed: ${e?.message ?? 'unknown error'}`);
@@ -303,11 +357,22 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
 
   const startSession = useCallback(() => {
     sessionStartTime.current  = Date.now();
-    stepCountAtStart.current  = 0;
+    stepCountAtStart.current  = stepCountRef.current;
     totalReadings.current     = 0;
     correctReadings.current   = 0;
     walkingReadings.current   = 0;
     footAngleSum.current      = 0;
+    footAngleOffset.current   = 0;
+    calibrationStartTimestamp.current = null;
+    calibrationAngleSum.current = 0;
+    calibrationSampleCount.current = 0;
+    isCalibratingRef.current  = true;
+    isCalibratedRef.current   = false;
+    setIsCalibrating(true);
+    setIsCalibrated(false);
+    setCalibratedFootAngle(null);
+    resetStepDetector();
+    resetPace();
     setStepCount(0);
     setPace(0);
     setElapsedSeconds(0);
@@ -318,11 +383,21 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const stopSession = useCallback(async () => {
     if (!isRecordingRef.current) return;
     isRecordingRef.current = false;
+    isCalibratingRef.current = false;
+    isCalibratedRef.current = false;
     setIsRecording(false);
+    setIsCalibrating(false);
+    setIsCalibrated(false);
+    setCalibratedFootAngle(null);
 
     const durationSecs   = Math.round((Date.now() - sessionStartTime.current) / 1000);
     const sessionSteps   = stepCount - stepCountAtStart.current;
     const total          = totalReadings.current;
+
+    footAngleOffset.current = 0;
+    calibrationStartTimestamp.current = null;
+    calibrationAngleSum.current = 0;
+    calibrationSampleCount.current = 0;
 
     if (total === 0 || durationSecs < 5) return; // discard accidental taps
 
@@ -336,7 +411,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       walkingPct:     Math.round((walkingReadings.current / total) * 100),
       avgFootAngle:   parseFloat((footAngleSum.current / total).toFixed(1)),
     });
-  }, [isRecording, stepCount, pace]);
+  }, [stepCount, pace]);
 
   const disconnect = useCallback(async () => {
     if (!connectedDeviceId) return;
@@ -351,8 +426,17 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     setConnectionStatus('Disconnected');
     setRawIMU(null);
     setDerived(null);
+    setCalibratedFootAngle(null);
+    setIsCalibrating(false);
+    setIsCalibrated(false);
     setWalking(false);
     setDevices([]);
+    isCalibratingRef.current = false;
+    isCalibratedRef.current = false;
+    footAngleOffset.current = 0;
+    calibrationStartTimestamp.current = null;
+    calibrationAngleSum.current = 0;
+    calibrationSampleCount.current = 0;
   }, [connectedDeviceId]);
 
   // ---------------------------------------------------------------------------
@@ -360,7 +444,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   return (
     <BleContext.Provider value={{
       isScanning, devices, connectedDeviceId, connectionStatus, isConnected,
-      rawIMU, derived,
+      rawIMU, derived, calibratedFootAngle, isCalibrating, isCalibrated,
       walking,
       stepCount, pace,
       isRecording, elapsedSeconds, startSession, stopSession,

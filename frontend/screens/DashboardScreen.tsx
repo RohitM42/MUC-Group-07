@@ -10,7 +10,7 @@ import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useBle } from '../context/BleContext';
 import { useTheme } from '../context/ThemeContext';
-import { getRollCorrectness } from '../utils/imuMath';
+import { getAngleCorrectness } from '../utils/imuMath';
 import { ColourPalette } from '../constants/colours';
 import { RootTabParamList } from '../App';
 
@@ -56,10 +56,25 @@ export default function DashboardScreen() {
   const navigation      = useNavigation<NavProp>();
   const { colours }     = useTheme();
   const s               = makeStyles(colours);
-  const { isConnected, connectionStatus, stepCount, pace, derived, rawIMU, walking, isRecording, elapsedSeconds, startSession, stopSession } = useBle();
+  const {
+    isConnected,
+    connectionStatus,
+    stepCount,
+    pace,
+    derived,
+    calibratedFootAngle,
+    isCalibrating,
+    isCalibrated,
+    walking,
+    isRecording,
+    elapsedSeconds,
+    startSession,
+    stopSession,
+  } = useBle();
 
-  const roll        = derived ? derived.roll.toFixed(1) : '—';
-  const correctness = derived ? getRollCorrectness(derived.roll) : null;
+  const roll        = isCalibrated && derived ? derived.roll.toFixed(1) : '—';
+  const footAngle   = isCalibrated && calibratedFootAngle !== null ? calibratedFootAngle.toFixed(1) : '—';
+  const correctness = calibratedFootAngle !== null ? getAngleCorrectness(calibratedFootAngle) : null;
   const paceDisplay = pace > 0 ? pace.toFixed(0) : '—';
   const stepDisplay = stepCount > 0 ? stepCount : '—';
 
@@ -80,6 +95,19 @@ export default function DashboardScreen() {
     correctness === 'correct'   ? 'Correct'         :
     correctness === 'warn'      ? 'Slight Deviation' :
     correctness === 'incorrect' ? 'Fix Foot Angle'   : '—';
+
+  const orientationLabel =
+    !isRecording ? 'Start Session to Calibrate' :
+    isCalibrating ? 'Calibrating...' :
+    correctnessLabel;
+
+  const orientationColor =
+    !isRecording || isCalibrating ? colours.textSub : correctnessColor;
+
+  const orientationDetail =
+    !isRecording ? 'Stand naturally, then start a session to calibrate foot angle.' :
+    isCalibrating ? 'Stand naturally for 2 seconds while we set your neutral foot angle.' :
+    `Foot angle: ${footAngle}°${derived ? `  |  Roll: ${roll}°` : ''}`;
 
   const statusColor = isConnected ? colours.accent : colours.textSub;
 
@@ -108,10 +136,10 @@ export default function DashboardScreen() {
       />
 
       {/* Orientation correctness --------------------------------------------- */}
-      <View style={[s.correctnessBar, { borderLeftColor: correctnessColor }]}>
+      <View style={[s.correctnessBar, { borderLeftColor: orientationColor }]}>
         <Text style={s.eyebrow}>Foot Orientation</Text>
-        <Text style={[s.correctnessLabel, { color: correctnessColor }]}>{correctnessLabel}</Text>
-        {derived && <Text style={s.correctnessAngle}>Roll: {roll}°{rawIMU ? `  |  Foot angle: ${rawIMU.footAngle.toFixed(1)}°` : ''}</Text>}
+        <Text style={[s.correctnessLabel, { color: orientationColor }]}>{orientationLabel}</Text>
+        <Text style={s.correctnessAngle}>{orientationDetail}</Text>
       </View>
 
       {/* Metrics grid -------------------------------------------------------- */}
@@ -119,8 +147,8 @@ export default function DashboardScreen() {
       <View style={s.grid}>
         <MetricCard label="Steps"      value={stepDisplay}                                                             colours={colours} />
         <MetricCard label="Pace"       value={paceDisplay}  unit="spm"                                                 colours={colours} />
-        <MetricCard label="Roll Angle" value={roll}         unit="°"   accent={derived ? correctnessColor : undefined} colours={colours} />
-        <MetricCard label="Foot Angle" value={rawIMU ? rawIMU.footAngle.toFixed(1) : '—'} unit="°"                    colours={colours} />
+        <MetricCard label="Roll Angle" value={roll}         unit="°"   accent={isCalibrated ? correctnessColor : undefined} colours={colours} />
+        <MetricCard label="Foot Angle" value={footAngle}    unit="°"                                                    colours={colours} />
         <MetricCard label="Distance"   value={distanceDisplay} unit={distanceUnit}                                     colours={colours} />
       </View>
 
@@ -133,6 +161,9 @@ export default function DashboardScreen() {
               {timerDisplay}
             </Text>
           </View>
+          {isRecording && isCalibrating && (
+            <Text style={s.timerHint}>Calibrating neutral stance...</Text>
+          )}
           {!isRecording && (
             <Text style={s.timerHint}>Start session to record data and begin timer</Text>
           )}

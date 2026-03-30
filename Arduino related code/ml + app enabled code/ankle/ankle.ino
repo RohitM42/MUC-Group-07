@@ -171,7 +171,8 @@ void setup() {
     }
   }
 
-  filter.begin(200);
+  // We publish roughly every 50 ms, so keep the filter rate close to 20 Hz.
+  filter.begin(20);
 
   BLE.setLocalName("IMU_Ankle");
   BLE.setAdvertisedService(ankleService);
