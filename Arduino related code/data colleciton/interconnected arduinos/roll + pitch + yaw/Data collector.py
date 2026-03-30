@@ -14,7 +14,7 @@ start_time = None
 # ---------- CSV Setup ----------
 script_dir = os.path.dirname(os.path.abspath(__file__))
 os.makedirs(os.path.join(script_dir, "dataset"), exist_ok=True)
-csv_path = os.path.join(script_dir, f"dataset\imu_data_{int(time.time())}.csv")
+csv_path = os.path.join(script_dir, "dataset", f"imu_data_{int(time.time())}.csv")
 
 csv_file = open(csv_path, "w", newline="")
 csv_writer = csv.writer(csv_file)
