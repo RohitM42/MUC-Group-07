@@ -158,10 +158,12 @@ void loop() {
             float ax,ay,az;
             float gx,gy,gz;
 
+            float mx,my,mz;
             IMU.readAcceleration(ax,ay,az);
             IMU.readGyroscope(gx,gy,gz);
+            IMU.readMagneticField(mx,my,mz);
 
-            filter.updateIMU(gx,gy,gz,ax,ay,az);
+            filter.update(gx,gy,gz,ax,ay,az,mx,my,mz);
 
             float footAngle = computeFootAngle(ankleData[5], filter.getYaw());
 
