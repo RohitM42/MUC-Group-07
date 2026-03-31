@@ -108,8 +108,8 @@ export function normalizeAngleDegrees(angle: number): number {
 }
 
 // Thresholds in degrees — adjust once calibration data is available
-export const ANGLE_WARN_THRESHOLD  = 7;  // amber: ±7°
-export const ANGLE_ERROR_THRESHOLD = 15; // red:   ±15°
+export const ANGLE_WARN_THRESHOLD  = 10; // amber: ±10°
+export const ANGLE_ERROR_THRESHOLD = 20; // red:   ±20°
 export const ROLL_WARN_THRESHOLD   = ANGLE_WARN_THRESHOLD;
 export const ROLL_ERROR_THRESHOLD  = ANGLE_ERROR_THRESHOLD;
 
