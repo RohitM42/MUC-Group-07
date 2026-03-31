@@ -117,6 +117,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const calibrationStartTimestamp = useRef<number | null>(null);
   const calibrationAngleSum       = useRef(0);
   const calibrationSampleCount    = useRef(0);
+  const prevRawFootAngle          = useRef(0);
 
   // Throttle: only push a UI update every 100ms (10Hz) regardless of 50Hz BLE stream
   const lastUIUpdate = useRef<number>(0);
@@ -205,15 +206,21 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       console.log('Received IMU data:', imu);
       const metrics = deriveMetrics(imu);
 
-      // Drift compensation: when standing still post-calibration, slowly adapt
-      // offset to track and cancel gyroscope yaw drift. Only active while
-      // standing — walking readings pass through unmodified.
+      // Drift compensation: when standing still AND angle is stable, slowly adapt
+      // offset to track and cancel gyroscope yaw drift. The stability check
+      // (rawChange < 0.5°) prevents the offset from shifting when the foot is
+      // actively rotated while standing.
       if (isRecordingRef.current && isCalibratedRef.current && !isCalibratingRef.current && !imu.walking) {
-        footAngleOffset.current += (imu.footAngle - footAngleOffset.current) * 0.005;
+        const rawChange = Math.abs(imu.footAngle - prevRawFootAngle.current);
+        if (rawChange < 0.5) {
+          footAngleOffset.current += (imu.footAngle - footAngleOffset.current) * 0.005;
+        }
       }
+      prevRawFootAngle.current = imu.footAngle;
 
+      // Sign is flipped so that outward flare reads as positive
       const currentCalibratedFootAngle = isCalibratedRef.current
-        ? normalizeAngleDegrees(imu.footAngle - footAngleOffset.current)
+        ? normalizeAngleDegrees(-(imu.footAngle - footAngleOffset.current))
         : null;
 
       // Step detection only runs when the TinyML classifier says walking
