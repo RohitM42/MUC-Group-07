@@ -9,7 +9,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 CLASSIFIER_DIR = Path(__file__).resolve().parent
-processed_dir = CLASSIFIER_DIR / "processed"
+data_dir = CLASSIFIER_DIR / "data"
+processed_dir = data_dir / "processed"
 models_dir = CLASSIFIER_DIR / "models"
 
 processed_dir.mkdir(parents=True, exist_ok=True)

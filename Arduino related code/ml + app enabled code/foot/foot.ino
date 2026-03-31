@@ -1,6 +1,9 @@
 #include <ArduinoBLE.h>
 #include <Arduino_LSM9DS1.h>
 #include <MadgwickAHRS.h>
+#include <math.h>
+#include "../angle_model.h"
+#include "../walking_model.h"
 
 Madgwick filter;
 
@@ -24,9 +27,9 @@ float outPacket[5];
 bool wasAppSubscribed = false;
 bool scanningForAnkle = false;
 
-// IMU sampling runs independently at 100 Hz regardless of ankle BLE notifications
-unsigned long lastIMUUpdate = 0;
-const unsigned long IMU_INTERVAL_MS = 10;
+float walkingWindow[WALKING_MODEL_WINDOW_SIZE][WALKING_MODEL_FEATURES_PER_SAMPLE];
+int walkingWindowWriteIndex = 0;
+int walkingWindowSampleCount = 0;
 
 void LongBlink(){
   digitalWrite(ledPin, HIGH);
@@ -42,18 +45,135 @@ void ShortBlink(){
   delay(200);
 }
 
-float wrapAngleDegrees(float angle)
+// Trained linear regression exported from classifier/models/angle_linear_regression.pkl.
+float predictFootAngle(
+  float footRoll,
+  float footPitch,
+  float footYaw,
+  float gx,
+  float gy,
+  float gz,
+  float ankleRoll,
+  float ankleYaw,
+  float ankleAx,
+  float ankleAy,
+  float ankleAz)
 {
-  while (angle > 180.0f) angle -= 360.0f;
-  while (angle < -180.0f) angle += 360.0f;
-  return angle;
+  float features[ANGLE_MODEL_FEATURE_COUNT] = {
+    footRoll,
+    footPitch,
+    footYaw,
+    gx,
+    gy,
+    gz,
+    ankleRoll,
+    ankleYaw,
+    ankleAx,
+    ankleAy,
+    ankleAz,
+  };
+
+  float prediction = ANGLE_MODEL_INTERCEPT;
+  for (int i = 0; i < ANGLE_MODEL_FEATURE_COUNT; ++i) {
+    prediction += features[i] * ANGLE_MODEL_COEF[i];
+  }
+
+  return prediction;
 }
 
-// Foot angle: foot yaw relative to ankle yaw (degrees).
-// This matches the training-side convention: Yaw1 - Yaw2.
-float computeFootAngle(float ankleYaw, float footYaw)
+void normalizeAcceleration(
+  float ax,
+  float ay,
+  float az,
+  float &axNorm,
+  float &ayNorm,
+  float &azNorm)
 {
-  return wrapAngleDegrees(footYaw - ankleYaw);
+  float norm = sqrt(ax * ax + ay * ay + az * az);
+
+  if (norm < 0.000001f) {
+    axNorm = 0.0f;
+    ayNorm = 0.0f;
+    azNorm = 0.0f;
+    return;
+  }
+
+  axNorm = ax / norm;
+  ayNorm = ay / norm;
+  azNorm = az / norm;
+}
+
+void addWalkingSample(
+  float footRoll,
+  float footPitch,
+  float footYaw,
+  float gx,
+  float gy,
+  float gz,
+  float ankleRoll,
+  float anklePitch,
+  float ankleYaw,
+  float ax,
+  float ay,
+  float az)
+{
+  float *sample = walkingWindow[walkingWindowWriteIndex];
+
+  sample[0] = footRoll;
+  sample[1] = footPitch;
+  sample[2] = footYaw;
+  sample[3] = gx;
+  sample[4] = gy;
+  sample[5] = gz;
+  sample[6] = ankleRoll;
+  sample[7] = anklePitch;
+  sample[8] = ankleYaw;
+  sample[9] = ax;
+  sample[10] = ay;
+  sample[11] = az;
+
+  walkingWindowWriteIndex = (walkingWindowWriteIndex + 1) % WALKING_MODEL_WINDOW_SIZE;
+
+  if (walkingWindowSampleCount < WALKING_MODEL_WINDOW_SIZE) {
+    walkingWindowSampleCount++;
+  }
+}
+
+bool walkingClassifierReady()
+{
+  return walkingWindowSampleCount >= WALKING_MODEL_WINDOW_SIZE;
+}
+
+float walkingClassifierScore()
+{
+  float score = WALKING_MODEL_INTERCEPT;
+  int modelIndex = 0;
+
+  for (int windowOffset = 0; windowOffset < WALKING_MODEL_WINDOW_SIZE; ++windowOffset) {
+    int sampleIndex = (walkingWindowWriteIndex + windowOffset) % WALKING_MODEL_WINDOW_SIZE;
+
+    for (int featureIndex = 0; featureIndex < WALKING_MODEL_FEATURES_PER_SAMPLE; ++featureIndex) {
+      float rawValue = walkingWindow[sampleIndex][featureIndex];
+      float standardizedValue =
+        (rawValue - WALKING_MODEL_MEAN[modelIndex]) / WALKING_MODEL_SCALE[modelIndex];
+
+      score += standardizedValue * WALKING_MODEL_COEF[modelIndex];
+      modelIndex++;
+    }
+  }
+
+  return score;
+}
+
+bool walkingClassifier()
+{
+  return walkingClassifierReady() && walkingClassifierScore() >= 0.0f;
+}
+
+void resetWalkingClassifier()
+{
+  walkingWindowWriteIndex = 0;
+  walkingWindowSampleCount = 0;
 }
 
 void ensurePhoneAdvertising()
@@ -110,8 +230,8 @@ void setup() {
     }
   }
 
-  // Filter runs at 100 Hz independently of the ankle BLE notification rate.
-  filter.begin(100);
+  // Match the training-time collector configuration for the walking classifier.
+  filter.begin(200);
 
   BLE.setLocalName("IMU_Foot");
   BLE.setAdvertisedService(footService);
@@ -130,6 +250,7 @@ void loop() {
   // is actually connected/subscribed, otherwise IMU_Foot can disappear from scans.
   if (!footChar.subscribed()) {
     stopAnkleScan();
+    resetWalkingClassifier();
     BLE.poll();
     delay(50);
     return;
@@ -155,28 +276,59 @@ void loop() {
         while (peripheral.connected() && footChar.subscribed()) {
           ensurePhoneAdvertising();
 
-          // Sample foot IMU and update filter at 100 Hz, independent of ankle notifications.
-          unsigned long now = millis();
-          if (now - lastIMUUpdate >= IMU_INTERVAL_MS) {
-            lastIMUUpdate = now;
-            float ax,ay,az;
-            float gx,gy,gz;
-            IMU.readAcceleration(ax,ay,az);
-            IMU.readGyroscope(gx,gy,gz);
-            filter.updateIMU(gx,gy,gz,ax,ay,az);
-          }
-
-          // Send a packet to the phone whenever the ankle sends fresh data.
+          // Each ankle notification becomes one feature frame for the trained windowed model.
           if (ankleChar.valueUpdated()) {
+            float footAx, footAy, footAz;
+            float footGx, footGy, footGz;
+            float footAxNorm, footAyNorm, footAzNorm;
+
             ankleChar.readValue((byte*)ankleData,24);
 
-            float footAngle = computeFootAngle(ankleData[5], filter.getYaw());
+            IMU.readAcceleration(footAx,footAy,footAz);
+            IMU.readGyroscope(footGx,footGy,footGz);
+
+            normalizeAcceleration(footAx, footAy, footAz, footAxNorm, footAyNorm, footAzNorm);
+            filter.updateIMU(footGx,footGy,footGz,footAxNorm,footAyNorm,footAzNorm);
+
+            float footRoll = filter.getRoll();
+            float footPitch = filter.getPitch();
+            float footYaw = filter.getYaw();
+
+            addWalkingSample(
+              footRoll,
+              footPitch,
+              footYaw,
+              footGx,
+              footGy,
+              footGz,
+              ankleData[0],
+              ankleData[1],
+              ankleData[2],
+              ankleData[3],
+              ankleData[4],
+              ankleData[5]
+            );
+
+            float footAngle = predictFootAngle(
+              footRoll,
+              footPitch,
+              footYaw,
+              footGx,
+              footGy,
+              footGz,
+              ankleData[0],
+              ankleData[2],
+              ankleData[3],
+              ankleData[4],
+              ankleData[5]
+            );
+            bool walking = walkingClassifier();
 
             outPacket[0] = footAngle;
-            outPacket[1] = ankleData[0];
-            outPacket[2] = ankleData[1];
-            outPacket[3] = ankleData[2];
-            outPacket[4] = ankleData[3];
+            outPacket[1] = walking ? 1.0f : 0.0f;
+            outPacket[2] = footAx;
+            outPacket[3] = footAy;
+            outPacket[4] = footAz;
 
 			if(footChar.subscribed()){
 				footChar.writeValue((byte*)outPacket,20);
@@ -190,6 +342,8 @@ void loop() {
         if (peripheral.connected() && !footChar.subscribed()) {
           peripheral.disconnect();
         }
+
+        resetWalkingClassifier();
       }
 
       startAnkleScan();

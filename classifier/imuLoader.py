@@ -4,8 +4,9 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 CLASSIFIER_DIR = Path(__file__).resolve().parent
-raw_dir = CLASSIFIER_DIR / "raw"
-processed_dir = CLASSIFIER_DIR / "processed"
+data_dir = CLASSIFIER_DIR / "data"
+raw_dir = data_dir / "raw"
+processed_dir = data_dir / "processed"
 
 raw_dir.mkdir(parents=True, exist_ok=True)
 processed_dir.mkdir(parents=True, exist_ok=True)

@@ -3,8 +3,8 @@
 // Packet from ml + app enabled code/foot/foot.ino
 // 20 bytes = 5 floats: [footAngle, walking, ax, ay, az]
 export interface RawIMU {
-  footAngle: number; // on-device linear model output (degrees)
-  walking:   boolean; // TinyML classifier result from ankle
+  footAngle: number; // on-device foot angle estimate (degrees)
+  walking:   boolean; // on-device walking classifier result from foot Arduino
   ax: number; ay: number; az: number; // accelerometer (g)
   timestamp: number; // ms since connection
 }
@@ -21,21 +21,22 @@ export type PacketSource = 'foot' | 'ankle' | 'unknown';
 
 // Unpacks the BLE notification from either Arduino.
 // foot packet:  [footAngle, walking, ax, ay, az]
-// ankle packet: [walking, ax, ay, az, roll, yaw]
+// ankle packet: [roll, pitch, yaw, ax, ay, az]
 export function unpackIMU(data: number[], timestamp: number, source: PacketSource = 'unknown'): RawIMU {
   console.log('[IMU] raw bytes length:', data.length, 'source:', source, 'bytes:', JSON.stringify(data));
 
   const buf = new DataView(new Uint8Array(data).buffer);
 
   const unpackAnklePacket = (): RawIMU => {
-    const walkingRaw = buf.getFloat32(0,  true);
-    const ax         = buf.getFloat32(4,  true);
-    const ay         = buf.getFloat32(8,  true);
-    const az         = buf.getFloat32(12, true);
-    const walking    = walkingRaw >= 0.5;
-    console.log('[IMU] ankle packet — walking:', walking);
+    const roll       = buf.getFloat32(0,  true);
+    const pitch      = buf.getFloat32(4,  true);
+    const yaw        = buf.getFloat32(8,  true);
+    const ax         = buf.getFloat32(12, true);
+    const ay         = buf.getFloat32(16, true);
+    const az         = buf.getFloat32(20, true);
+    console.log('[IMU] ankle packet — roll/pitch/yaw:', roll, pitch, yaw);
     console.log('[IMU] ACC:', ax, ay, az);
-    return { footAngle: 0, walking, ax, ay, az, timestamp };
+    return { footAngle: 0, walking: false, ax, ay, az, timestamp };
   };
 
   const unpackFootPacket = (): RawIMU => {
@@ -59,14 +60,14 @@ export function unpackIMU(data: number[], timestamp: number, source: PacketSourc
   }
 
   if (source === 'ankle') {
-    if (data.length < 16) {
-      console.warn('[IMU] ankle packet too short — expected at least 16 bytes, got', data.length);
+    if (data.length < 24) {
+      console.warn('[IMU] ankle packet too short — expected 24 bytes, got', data.length);
       return { footAngle: 0, walking: false, ax: 0, ay: 0, az: 0, timestamp };
     }
     return unpackAnklePacket();
   }
 
-  // 24-byte ankle packet: [walking, ax, ay, az, roll, yaw]
+  // 24-byte ankle packet: [roll, pitch, yaw, ax, ay, az]
   if (data.length >= 24) {
     return unpackAnklePacket();
   }

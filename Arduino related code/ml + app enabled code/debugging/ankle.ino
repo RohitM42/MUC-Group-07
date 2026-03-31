@@ -13,132 +13,45 @@ BLECharacteristic ankleChar(
   24
 );
 
+// Packet layout sent to the foot Arduino:
+// [roll, pitch, yaw, ax_norm, ay_norm, az_norm]
 float packet[6];
 
-//tinyML defintions
-#define INPUT_SIZE 4
-#define HIDDEN_SIZE 6
-#define WINDOW_SIZE 10
-
-float axBuffer[WINDOW_SIZE];
-float ayBuffer[WINDOW_SIZE];
-float azBuffer[WINDOW_SIZE];
-
-int bufferIndex = 0;
-bool windowFull = false;
-
-float W1[INPUT_SIZE][HIDDEN_SIZE] = {
-  {0.1,0.2,0.3,0.2,0.1,0.2},
-  {0.2,0.1,0.1,0.3,0.2,0.1},
-  {0.1,0.2,0.2,0.1,0.2,0.3},
-  {0.3,0.1,0.2,0.2,0.1,0.1}
-};
-
-float Bias1[HIDDEN_SIZE] = {0};
-
-float W2[HIDDEN_SIZE] = {0.2,0.1,0.3,0.2,0.2,0.1};
-float Bias2 = 0;
-
-void addSample(float ax, float ay, float az)
+void normalizeAcceleration(
+  float ax,
+  float ay,
+  float az,
+  float &axNorm,
+  float &ayNorm,
+  float &azNorm)
 {
-  axBuffer[bufferIndex] = ax;
-  ayBuffer[bufferIndex] = ay;
-  azBuffer[bufferIndex] = az;
+  float norm = sqrt(ax * ax + ay * ay + az * az);
 
-  bufferIndex++;
-
-  if(bufferIndex >= WINDOW_SIZE)
-  {
-    bufferIndex = 0;
-    windowFull = true;
-  }
-}
-
-float relu(float x){
-  return x > 0 ? x : 0;
-}
-
-float sigmoid(float x){
-  return 1.0/(1.0+exp(-x));
-}
-
-void computeFeatures(
-  float &meanMag,
-  float &stdMag,
-  float &maxMag,
-  float &minMag)
-{
-
-  float sum = 0;
-  float mags[WINDOW_SIZE];
-
-  maxMag = -1000;
-  minMag = 1000;
-
-  for(int i=0;i<WINDOW_SIZE;i++)
-  {
-    float mag =
-      sqrt(axBuffer[i]*axBuffer[i] +
-           ayBuffer[i]*ayBuffer[i] +
-           azBuffer[i]*azBuffer[i]);
-
-    mags[i] = mag;
-
-    sum += mag;
-
-    if(mag > maxMag) maxMag = mag;
-    if(mag < minMag) minMag = mag;
+  if (norm < 0.000001f) {
+    axNorm = 0.0f;
+    ayNorm = 0.0f;
+    azNorm = 0.0f;
+    return;
   }
 
-  meanMag = sum / WINDOW_SIZE;
-
-  float var = 0;
-
-  for(int i=0;i<WINDOW_SIZE;i++)
-  {
-    float d = mags[i] - meanMag;
-    var += d*d;
-  }
-
-  stdMag = sqrt(var / WINDOW_SIZE);
+  axNorm = ax / norm;
+  ayNorm = ay / norm;
+  azNorm = az / norm;
 }
-
-bool walkingClassifier()
-{
-
-  float meanMag, stdMag, maxMag, minMag;
-
-  computeFeatures(meanMag, stdMag, maxMag, minMag);
-
-  float input[4] = {
-    meanMag,
-    stdMag,
-    maxMag,
-    minMag
-  };
-
-  // placeholder linear model
-
-  float score =
-      input[0]*1.2
-    + input[1]*2.0
-    + input[2]*0.5
-    - input[3]*0.3
-    - 1.5;
-
-  float prob = 1.0 / (1.0 + exp(-score));
-
-  return prob > 0.5;
-}
-// end of tinyML definitions
 
 void setup() {
-
   Serial.begin(115200);
   while(!Serial);
 
-  IMU.begin();
-  BLE.begin();
+  if (!IMU.begin()) {
+    Serial.println("IMU failed");
+    while (1);
+  }
+
+  if (!BLE.begin()) {
+    Serial.println("BLE failed");
+    while (1);
+  }
 
   filter.begin(200);
 
@@ -154,47 +67,37 @@ void setup() {
 }
 
 void loop() {
-  bool walking = false;
-
-  
   BLEDevice central = BLE.central();
 
   if (central) {
-
     Serial.println("Foot connected");
 
     while (central.connected()) {
+      float ax, ay, az;
+      float gx, gy, gz;
+      float axNorm, ayNorm, azNorm;
 
-      float ax,ay,az;
-      float gx,gy,gz;
+      IMU.readAcceleration(ax, ay, az);
+      IMU.readGyroscope(gx, gy, gz);
 
-      IMU.readAcceleration(ax,ay,az);
-      IMU.readGyroscope(gx,gy,gz);
+      normalizeAcceleration(ax, ay, az, axNorm, ayNorm, azNorm);
+      filter.updateIMU(gx, gy, gz, axNorm, ayNorm, azNorm);
 
-      addSample(ax, ay, az);
+      packet[0] = filter.getRoll();
+      packet[1] = filter.getPitch();
+      packet[2] = filter.getYaw();
+      packet[3] = axNorm;
+      packet[4] = ayNorm;
+      packet[5] = azNorm;
 
-      filter.updateIMU(gx,gy,gz,ax,ay,az);
-
-      float roll = filter.getRoll();
-      float yaw  = filter.getYaw();
-
-      if(windowFull){
-      walking = walkingClassifier();
+      if (ankleChar.subscribed()) {
+        ankleChar.writeValue((byte*)packet, 24);
+        Serial.println("Sent ankle feature frame");
       }
-
-      packet[0] = walking;
-      packet[1] = ax;
-      packet[2] = ay;
-      packet[3] = az;
-      packet[4] = roll;
-      packet[5] = yaw;
-
-	  if(ankleChar.subscribed()){
-		ankleChar.writeValue((byte*)packet,24);
-		Serial.println("Forwarded data to foot");
-	  }
 
       delay(50);
     }
+
+    Serial.println("Foot disconnected");
   }
 }
