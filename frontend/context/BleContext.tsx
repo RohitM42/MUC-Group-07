@@ -204,6 +204,14 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       const imu = unpackIMU(data.value, timestamp, packetSource);
       console.log('Received IMU data:', imu);
       const metrics = deriveMetrics(imu);
+
+      // Drift compensation: when standing still post-calibration, slowly adapt
+      // offset to track and cancel gyroscope yaw drift. Only active while
+      // standing — walking readings pass through unmodified.
+      if (isRecordingRef.current && isCalibratedRef.current && !isCalibratingRef.current && !imu.walking) {
+        footAngleOffset.current += (imu.footAngle - footAngleOffset.current) * 0.005;
+      }
+
       const currentCalibratedFootAngle = isCalibratedRef.current
         ? normalizeAngleDegrees(imu.footAngle - footAngleOffset.current)
         : null;

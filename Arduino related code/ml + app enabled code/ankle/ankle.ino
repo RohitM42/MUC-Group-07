@@ -200,12 +200,9 @@ void loop() {
       IMU.readAcceleration(ax,ay,az);
       IMU.readGyroscope(gx,gy,gz);
 
-      float mx,my,mz;
-      IMU.readMagneticField(mx,my,mz);
-
       addSample(ax, ay, az);
 
-      filter.update(gx,gy,gz,ax,ay,az,mx,my,mz);
+      filter.updateIMU(gx,gy,gz,ax,ay,az);
 
       float roll = filter.getRoll();
       float yaw  = filter.getYaw();

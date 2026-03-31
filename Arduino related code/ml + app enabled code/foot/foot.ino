@@ -161,11 +161,9 @@ void loop() {
             lastIMUUpdate = now;
             float ax,ay,az;
             float gx,gy,gz;
-            float mx,my,mz;
             IMU.readAcceleration(ax,ay,az);
             IMU.readGyroscope(gx,gy,gz);
-            IMU.readMagneticField(mx,my,mz);
-            filter.update(gx,gy,gz,ax,ay,az,mx,my,mz);
+            filter.updateIMU(gx,gy,gz,ax,ay,az);
           }
 
           // Send a packet to the phone whenever the ankle sends fresh data.
