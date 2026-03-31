@@ -151,7 +151,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         ]);
       }
-      await BleManager.start({ showAlert: false, restoreIdentifier: 'muc-group07-ble' });
+      await BleManager.start({ showAlert: false, restoreIdentifierKey: 'muc-group07-ble' });
     };
 
     init();
