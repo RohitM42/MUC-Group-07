@@ -74,7 +74,7 @@ export default function DashboardScreen() {
 
   const roll        = isCalibrated && derived ? derived.roll.toFixed(1) : '—';
   const footAngle   = isCalibrated && calibratedFootAngle !== null ? calibratedFootAngle.toFixed(1) : '—';
-  const correctness = calibratedFootAngle !== null ? getAngleCorrectness(calibratedFootAngle, walking) : null;
+  const correctness = calibratedFootAngle !== null ? getAngleCorrectness(calibratedFootAngle) : null;
   const paceDisplay = pace > 0 ? pace.toFixed(0) : '—';
   const stepDisplay = stepCount > 0 ? stepCount : '—';
 
