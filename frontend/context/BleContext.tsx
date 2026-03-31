@@ -22,6 +22,7 @@ import {
   RawIMU,
   DerivedMetrics,
   ANGLE_WARN_THRESHOLD,
+  WALK_ANGLE_WARN_THRESHOLD,
   normalizeAngleDegrees,
 } from '../utils/imuMath';
 import { saveSession } from '../utils/sessionStore';
@@ -265,7 +266,8 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       // Accumulate recording stats only after calibration has completed.
       if (isRecordingRef.current && currentCalibratedFootAngle !== null) {
         totalReadings.current++;
-        if (Math.abs(currentCalibratedFootAngle) <= ANGLE_WARN_THRESHOLD) correctReadings.current++;
+        const warnThreshold = imu.walking ? WALK_ANGLE_WARN_THRESHOLD : ANGLE_WARN_THRESHOLD;
+        if (Math.abs(currentCalibratedFootAngle) <= warnThreshold) correctReadings.current++;
         if (imu.walking) walkingReadings.current++;
         footAngleSum.current += currentCalibratedFootAngle;
       }
@@ -421,7 +423,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       date:           new Date(sessionStartTime.current).toISOString(),
       durationSecs,
       steps:          sessionSteps,
-      avgPace:        pace,
+      avgPace:        Math.round(pace),
       percentCorrect: Math.round((correctReadings.current / total) * 100),
       walkingPct:     Math.round((walkingReadings.current / total) * 100),
       avgFootAngle:   parseFloat((footAngleSum.current / total).toFixed(1)),

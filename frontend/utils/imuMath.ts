@@ -107,18 +107,23 @@ export function normalizeAngleDegrees(angle: number): number {
   return normalized;
 }
 
-// Thresholds in degrees — adjust once calibration data is available
-export const ANGLE_WARN_THRESHOLD  = 10; // amber: ±10°
-export const ANGLE_ERROR_THRESHOLD = 20; // red:   ±20°
+// Thresholds in degrees — standing (strict) vs walking (lenient, natural gait varies more)
+export const ANGLE_WARN_THRESHOLD  = 8;  // amber: ±8°  (standing)
+export const ANGLE_ERROR_THRESHOLD = 18; // red:   ±18° (standing)
 export const ROLL_WARN_THRESHOLD   = ANGLE_WARN_THRESHOLD;
 export const ROLL_ERROR_THRESHOLD  = ANGLE_ERROR_THRESHOLD;
 
+export const WALK_ANGLE_WARN_THRESHOLD  = 30; // amber: ±30° (walking)
+export const WALK_ANGLE_ERROR_THRESHOLD = 45; // red:   ±45° (walking)
+
 export type CorrectnessLevel = 'correct' | 'warn' | 'incorrect';
 
-export function getAngleCorrectness(angle: number): CorrectnessLevel {
-  const abs = Math.abs(angle);
-  if (abs <= ANGLE_WARN_THRESHOLD)  return 'correct';
-  if (abs <= ANGLE_ERROR_THRESHOLD) return 'warn';
+export function getAngleCorrectness(angle: number, isWalking = false): CorrectnessLevel {
+  const abs   = Math.abs(angle);
+  const warn  = isWalking ? WALK_ANGLE_WARN_THRESHOLD  : ANGLE_WARN_THRESHOLD;
+  const error = isWalking ? WALK_ANGLE_ERROR_THRESHOLD : ANGLE_ERROR_THRESHOLD;
+  if (abs <= warn)  return 'correct';
+  if (abs <= error) return 'warn';
   return 'incorrect';
 }
 

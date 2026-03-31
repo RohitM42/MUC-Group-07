@@ -113,7 +113,7 @@ function SessionCard({ session, colours }: { session: SessionRecord; colours: Co
           <Text style={s.quickLabel}>Steps</Text>
         </View>
         <View style={s.quickStat}>
-          <Text style={s.quickValue}>{session.avgPace}</Text>
+          <Text style={s.quickValue}>{Math.round(session.avgPace)}</Text>
           <Text style={s.quickLabel}>Avg Pace (spm)</Text>
         </View>
         <View style={s.quickStat}>
